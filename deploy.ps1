@@ -1,22 +1,42 @@
-# deploy.ps1 — Run this from the HUSS-HQ-1.0 folder on Windows
-# Usage: .\deploy.ps1
+# deploy.ps1 — Run this from your project folder on Windows
+# Usage: .\deploy.ps1 [-Vps "user@host"] [-RemoteBase "/root"]
 # Requires: OpenSSH + tar (both built into Windows 10/11)
 
-$VPS        = "root@37.97.169.128"
-$REMOTE     = "/root/HUSS-HQ-1.0"
+param(
+    [string]$Vps = "root@37.97.169.128",
+    [string]$RemoteBase = "/root"
+)
+
+$VPS        = $Vps
 $ProjectDir = $PSScriptRoot
-$TarPath    = Join-Path $env:TEMP "huss-hq-deploy.tar.gz"
+$ProjectName = Split-Path $ProjectDir -Leaf
+$REMOTE     = "$RemoteBase/$ProjectName"
+$RemoteTar  = "/tmp/$ProjectName-deploy.tar.gz"
+$TarPath    = Join-Path $env:TEMP "$ProjectName-deploy.tar.gz"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  HUSS HQ Bot — Windows Deploy Script"      -ForegroundColor Cyan
+Write-Host "  Discord Bot — Windows Deploy Script"      -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Project: $ProjectName" -ForegroundColor Cyan
+Write-Host "Target : $VPS:$REMOTE" -ForegroundColor Cyan
 Write-Host ""
 
 # ── Verify local .env exists ──────────────────────────────────────────────────
-if (-not (Test-Path (Join-Path $ProjectDir ".env"))) {
+${EnvFile} = Join-Path $ProjectDir ".env"
+if (-not (Test-Path $EnvFile)) {
     Write-Error ".env not found in $ProjectDir. Aborting."
     exit 1
+}
+
+# Validate required values for a fresh production deploy
+$EnvText = Get-Content $EnvFile -Raw
+foreach ($RequiredKey in @("DISCORD_TOKEN", "CLIENT_ID")) {
+    if ($EnvText -notmatch "(?m)^$RequiredKey\s*=\s*\S+") {
+        Write-Error "Missing required $RequiredKey value in .env. Aborting."
+        exit 1
+    }
 }
 
 # ── Pack project into a tar (excluding node_modules and .git) ─────────────────
@@ -30,13 +50,21 @@ if ($LASTEXITCODE -ne 0) { Write-Error "tar failed."; exit 1 }
 
 # ── Upload archive to VPS ─────────────────────────────────────────────────────
 Write-Host "[2/4] Uploading archive to VPS..." -ForegroundColor Yellow
-scp $TarPath "${VPS}:/tmp/huss-deploy.tar.gz"
+scp $TarPath "${VPS}:$RemoteTar"
 if ($LASTEXITCODE -ne 0) { Write-Error "SCP upload failed."; exit 1 }
 Remove-Item $TarPath -Force
 
 # ── Extract on VPS and run deploy.sh ─────────────────────────────────────────
 Write-Host "[3/4] Extracting and deploying on VPS..." -ForegroundColor Yellow
-ssh $VPS "mkdir -p $REMOTE && rm -rf $REMOTE/features $REMOTE/commands && tar -xzf /tmp/huss-deploy.tar.gz -C $REMOTE && rm -f /tmp/huss-deploy.tar.gz && sed -i 's/\r//' $REMOTE/deploy.sh && bash $REMOTE/deploy.sh"
+$SshCommand = @"
+set -e
+mkdir -p '$REMOTE'
+tar -xzf '$RemoteTar' -C '$REMOTE'
+rm -f '$RemoteTar'
+sed -i 's/\r$//' '$REMOTE/deploy.sh'
+bash '$REMOTE/deploy.sh'
+"@
+ssh $VPS $SshCommand
 if ($LASTEXITCODE -ne 0) { Write-Error "Remote deploy failed."; exit 1 }
 
 Write-Host ""

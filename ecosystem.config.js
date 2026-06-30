@@ -1,7 +1,10 @@
+const packageJson = require('./package.json');
+const appName = process.env.BOT_NAME || packageJson.name || 'discord-bot';
+
 module.exports = {
   apps: [
     {
-      name: 'huss-hq-bot',
+      name: appName,
       script: 'index.js',
       watch: false,
       restart_delay: 5000,
