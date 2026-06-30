@@ -20,7 +20,7 @@ Write-Host "  Discord Bot — Windows Deploy Script"      -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Project: $ProjectName" -ForegroundColor Cyan
-Write-Host "Target : $VPS:$REMOTE" -ForegroundColor Cyan
+Write-Host "Target : ${VPS}:$REMOTE" -ForegroundColor Cyan
 Write-Host ""
 
 # ── Verify local .env exists ──────────────────────────────────────────────────
