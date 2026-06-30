@@ -67,6 +67,7 @@ function getAllConfig(guildId) {
     'COLLIE_ROLE_ID',
     'UNVERIFIED_ROLE_ID',
     'FORMER_MEMBER_ROLE_ID',
+    'BOT_ADMIN_ROLE_ID',
     'WELCOME_IMAGE_URL'
   ];
   const result = {};

@@ -11,13 +11,9 @@ const {
   TextInputStyle,
   PermissionFlagsBits,
 } = require('discord.js');
+const { isOfficer } = require('../utils/permissions');
 
 const RR_STORE_PATH = path.join(__dirname, '..', 'data', 'reactionroles.json');
-const OFFICER_RANKS = ['Officer', 'Commander'];
-
-function isOfficer(member) {
-  return member.roles.cache.some(r => OFFICER_RANKS.includes(r.name));
-}
 
 function readRRStore() {
   if (!fs.existsSync(RR_STORE_PATH)) return { messages: {} };

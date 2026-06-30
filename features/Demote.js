@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { isOfficer, isBotAdmin } = require('../utils/permissions');
 
 const ranks = ['Cadet', 'Private', 'Legionaire', 'Dragoon', 'Hussar', 'Officer', 'Commander'];
 const highestOfficerDemoteIndex = ranks.indexOf('Dragoon');
@@ -42,11 +43,12 @@ module.exports = {
 
     const executor = interaction.member;
     const executorRank = getMemberRank(executor);
-    if (executorRank !== 'Officer' && executorRank !== 'Commander') {
+    const botAdmin = isBotAdmin(executor);
+    if (!isOfficer(executor)) {
       return interaction.reply({ content: 'Only Officers and Commanders can demote members.', ephemeral: true });
     }
 
-    if (executorRank === 'Commander' && target.id === executor.id) {
+    if (!botAdmin && executorRank === 'Commander' && target.id === executor.id) {
       return interaction.reply({ content: 'A Commander cannot demote themselves.', ephemeral: true });
     }
 
@@ -55,7 +57,7 @@ module.exports = {
       return interaction.reply({ content: 'Target member does not have a rank role.', ephemeral: true });
     }
 
-    if (!canAffectRank(executorRank, targetRank)) {
+    if (!botAdmin && !canAffectRank(executorRank, targetRank)) {
       return interaction.reply({ content: 'Officers cannot demote other Officers or the Commander.', ephemeral: true });
     }
 
@@ -64,7 +66,7 @@ module.exports = {
       return interaction.reply({ content: 'That member is already at the lowest rank.', ephemeral: true });
     }
 
-    if (executorRank === 'Officer' && currentIndex > highestOfficerDemoteIndex) {
+    if (!botAdmin && executorRank === 'Officer' && currentIndex > highestOfficerDemoteIndex) {
       return interaction.reply({ content: 'Officers can only demote members up to Dragoon.', ephemeral: true });
     }
 

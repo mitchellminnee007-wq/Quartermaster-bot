@@ -21,6 +21,7 @@ const ROLE_SETTINGS = [
   { name: 'Unverified Role',         value: 'UNVERIFIED_ROLE_ID' },
   { name: 'Former Member Role',      value: 'FORMER_MEMBER_ROLE_ID' },
   { name: 'Recruitment Officer Role', value: 'RECRUITMENT_OFFICER_ROLE_ID' },
+  { name: 'Bot Admin Role',          value: 'BOT_ADMIN_ROLE_ID' },
 ];
 
 module.exports = {
@@ -153,7 +154,7 @@ module.exports = {
           ...roleFields,
           { name: 'Welcome Image', value: cfg.WELCOME_IMAGE_URL ? `[Link](${cfg.WELCOME_IMAGE_URL})` : '*Not set*', inline: true }
         )
-        .setFooter({ text: 'Use /config set-channel or /config set-image to update • Powered by Hypha' })
+        .setFooter({ text: 'Use /config set-channel or /config set-image to update • Qualification Bot' })
         .setTimestamp();
 
       return interaction.reply({ embeds: [embed], ephemeral: true });

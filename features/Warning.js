@@ -8,9 +8,9 @@ const {
   SlashCommandBuilder
 } = require('discord.js');
 const { getConfig } = require('../utils/config');
+const { isOfficer } = require('../utils/permissions');
 
 const ranks = ['Cadet', 'Private', 'Legionaire', 'Dragoon', 'Hussar', 'Officer', 'Commander'];
-const officerRanks = ['Officer', 'Commander'];
 const warningRoleNames = ['Warning I', 'Warning II', 'Warning III'];
 const warningStorePath = path.join(__dirname, '..', 'data', 'warnings.json');
 const oneDayMs = 86_400_000;
@@ -77,11 +77,6 @@ function getWarningRoles(guild) {
   return warningRoleNames
     .map(roleName => getRoleByName(guild, roleName))
     .filter(Boolean);
-}
-
-function isOfficer(member) {
-  const rank = getMemberRank(member);
-  return officerRanks.includes(rank);
 }
 
 function currentMonthKey() {

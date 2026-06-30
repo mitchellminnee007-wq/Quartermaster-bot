@@ -12,11 +12,10 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const { getConfig } = require('../utils/config');
+const { isOfficer, canAddKills } = require('../utils/permissions');
 
 const STORE_PATH               = path.join(__dirname, '..', 'data', 'killcount.json');
 const DEFAULT_KILLCOUNT_CHANNEL = '1445348388324507688';
-const OFFICER_RANKS            = ['Officer', 'Commander'];
-const KILL_RANKS               = ['Officer', 'Commander', 'Member'];
 const MEDALS                   = ['🥇', '🥈', '🥉'];
 
 // ── Vehicle name normalisation ────────────────────────────────────────────────
@@ -150,14 +149,6 @@ function clearActive(guildId) {
   writeStore(store);
 }
 
-function isOfficer(member) {
-  return member.roles.cache.some(r => OFFICER_RANKS.includes(r.name));
-}
-
-function canAddKills(member) {
-  return member.roles.cache.some(r => KILL_RANKS.includes(r.name));
-}
-
 // ── UI helpers ───────────────────────────────────────────────────────────────
 /**
  * Renders a compact ASCII progress bar.
@@ -240,7 +231,7 @@ function buildEmbed(war, ended = false) {
       { name: '🪖 Combatants',          value: `\`${combatants}\``,    inline: true },
       { name: '⏱️ Duration',            value: `\`${duration}\``,      inline: true },
     )
-    .setFooter({ text: `⚔️ HUSS Command  •  Started by ${war.startedByName}` })
+    .setFooter({ text: `Qualification Command  •  Started by ${war.startedByName}` })
     .setTimestamp(war.startedAt);
 }
 

@@ -1,5 +1,5 @@
 const packageJson = require('./package.json');
-const appName = process.env.BOT_NAME || packageJson.name || 'discord-bot';
+const appName = process.env.BOT_NAME || packageJson.name || 'qualification-bot';
 
 module.exports = {
   apps: [

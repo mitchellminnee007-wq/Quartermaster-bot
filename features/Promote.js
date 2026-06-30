@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getConfig } = require('../utils/config.js');
+const { isOfficer, isBotAdmin } = require('../utils/permissions');
+const { ROLE_IDS } = require('../utils/roleIds');
 
 const ranks = ['Cadet', 'Private', 'Legionaire', 'Dragoon', 'Hussar', 'Officer', 'Commander'];
 const highestOfficerPromoteIndex = ranks.indexOf('Dragoon');
@@ -15,6 +17,13 @@ function getRankRole(guild, rank) {
 function getRoleByName(guild, roleName) {
   const normalized = roleName.toLowerCase();
   return guild.roles.cache.find(role => role.name.toLowerCase() === normalized) || null;
+}
+
+function getRoleByIdOrName(guild, roleId, fallbackName) {
+  if (roleId && guild.roles.cache.has(roleId)) {
+    return guild.roles.cache.get(roleId);
+  }
+  return getRoleByName(guild, fallbackName);
 }
 
 function getMemberRankRoles(member) {
@@ -40,10 +49,11 @@ module.exports = {
 
     const executor = interaction.member;
     const executorRank = getMemberRank(executor);
+    const botAdmin = isBotAdmin(executor);
     const recruitmentOfficerRole = getRoleByName(interaction.guild, 'Recruitment Officer');
     const isRecruitmentOfficer = recruitmentOfficerRole && executor.roles.cache.has(recruitmentOfficerRole.id);
     
-    if (executorRank !== 'Officer' && executorRank !== 'Commander' && !isRecruitmentOfficer) {
+    if (!isOfficer(executor) && !isRecruitmentOfficer) {
       return interaction.reply({ content: 'Only Officers, Commanders, and Recruitment Officers can promote members.', ephemeral: true });
     }
 
@@ -54,10 +64,10 @@ module.exports = {
     }
 
     const nextRank = ranks[currentIndex + 1];
-    if (isRecruitmentOfficer && nextRank !== 'Cadet') {
+    if (!botAdmin && isRecruitmentOfficer && nextRank !== 'Cadet') {
       return interaction.reply({ content: 'Recruitment Officers can only promote members to Cadet.', ephemeral: true });
     }
-    if ((executorRank === 'Officer' || isRecruitmentOfficer) && currentIndex + 1 > highestOfficerPromoteIndex) {
+    if (!botAdmin && (executorRank === 'Officer' || isRecruitmentOfficer) && currentIndex + 1 > highestOfficerPromoteIndex) {
       return interaction.reply({ content: 'Officers and Recruitment Officers can only promote members up to Dragoon.', ephemeral: true });
     }
 
@@ -70,7 +80,7 @@ module.exports = {
     let hussarRole = null;
     if (nextRank === 'Commander') {
       const commanderRole = nextRole;
-      hussarRole = getRankRole(interaction.guild, 'Hussar');
+      hussarRole = getRoleByIdOrName(interaction.guild, ROLE_IDS.HUSS_ROLE_ID, 'Hussar');
       const currentCommanders = commanderRole.members.filter(member => member.id !== target.id);
       if (currentCommanders.size) {
         demotedCommanders = [...currentCommanders.values()];
@@ -101,13 +111,16 @@ module.exports = {
     await target.roles.add(nextRole);
 
     if (!targetRank && nextRank === 'Cadet') {
-      const memberRole = getRoleByName(interaction.guild, 'Member');
+      const memberRole = getRoleByIdOrName(interaction.guild, ROLE_IDS.MEMBER_ROLE_ID, 'Member');
       if (memberRole && !target.roles.cache.has(memberRole.id)) {
         await target.roles.add(memberRole);
       }
 
-      const cleanupRoles = ['unverified', 'Former collie', 'Ally']
-        .map(roleName => getRoleByName(interaction.guild, roleName))
+      const cleanupRoles = [
+        getRoleByIdOrName(interaction.guild, ROLE_IDS.GUEST_ROLE_ID, 'unverified'),
+        getRoleByIdOrName(interaction.guild, ROLE_IDS.CC_ROLE_ID, 'Former collie'),
+        getRoleByIdOrName(interaction.guild, ROLE_IDS.ALLY_ROLE_ID, 'Ally'),
+      ]
         .filter(role => role && target.roles.cache.has(role.id));
 
       if (cleanupRoles.length) {

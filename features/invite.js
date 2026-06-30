@@ -14,7 +14,7 @@ const INVITE_PERMISSIONS = [
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('invite')
-    .setDescription('Get the invite link to add HUSS HQ Bot to your server.')
+    .setDescription('Get the invite link to add Qualification Bot to your server.')
     .setDMPermission(true),
 
   async execute(interaction) {
@@ -23,11 +23,11 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('Invite HUSS HQ Bot')
+      .setTitle('Invite Qualification Bot')
       .setThumbnail(interaction.client.user.displayAvatarURL())
-      .setDescription(`Click the link below to add **HUSS HQ Bot** to your server.\n\n[**Add to Server**](${inviteUrl})`)
+      .setDescription(`Click the link below to add **Qualification Bot** to your server.\n\n[**Add to Server**](${inviteUrl})`)
       .addFields({ name: 'Invite Link', value: inviteUrl })
-      .setFooter({ text: 'Powered by Hypha' })
+      .setFooter({ text: 'Qualification Bot' })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });

@@ -13,9 +13,9 @@ const {
   ChannelType,
 } = require('discord.js');
 const { getConfig } = require('../utils/config');
+const { isRecruitmentOfficer } = require('../utils/permissions');
 
 const STORE_PATH   = path.join(__dirname, '..', 'data', 'tickets.json');
-const OFFICER_RANKS = ['Officer', 'Commander'];
 const TICKET_COLOR  = 0x5865F2;
 
 const TICKET_TYPES = {
@@ -84,14 +84,6 @@ function cleanupOldTranscripts(maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
   }
 }
 
-function isRecruitmentOfficer(member) {
-  const recruitmentRoleId = getConfig(member.guild.id, 'RECRUITMENT_OFFICER_ROLE_ID');
-  if (recruitmentRoleId) {
-    return member.roles.cache.has(recruitmentRoleId);
-  }
-  return member.roles.cache.some(r => OFFICER_RANKS.includes(r.name));
-}
-
 function sanitizeName(str) {
   return str.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '').slice(0, 25);
 }
@@ -110,7 +102,7 @@ function buildTicketEmbed(ticket) {
       { name: '👤  Opened by',  value: `<@${ticket.userId}>`,                                       inline: true },
       { name: '🔖  Claimed by', value: ticket.claimedBy ? `<@${ticket.claimedBy}>` : '*Unclaimed*', inline: true },
     )
-    .setFooter({ text: '⚔️ HUSS Ticket System' })
+    .setFooter({ text: 'Qualification Ticket System' })
     .setTimestamp(ticket.createdAt);
 
   if ((ticket.type === 'verify' || ticket.type === 'ally') && fs.existsSync(path.join(__dirname, '..', 'Supporting things', 'F1Screenshot.png'))) {
@@ -222,7 +214,8 @@ async function openTicket(interaction, type) {
       console.warn(`[Tickets] Recruitment officer role ID ${recruitmentRoleId} not found in guild ${guildId}. Ticket access may be restricted.`);
     }
   } else {
-    for (const rank of OFFICER_RANKS) {
+    const fallbackRanks = ['Officer', 'Commander'];
+    for (const rank of fallbackRanks) {
       const role = guild.roles.cache.find(r => r.name === rank);
       if (role) {
         overwrites.push({
@@ -268,7 +261,7 @@ async function openTicket(interaction, type) {
           `> Welcome, <@${user.id}>! An officer will be with you shortly.\n` +
           `> *Bienvenue ! Un officier vous rejoindra très bientot.*`
         )
-        .setFooter({ text: '⚔️ HUSS Ticket System' })
+        .setFooter({ text: 'Qualification Ticket System' })
         .setTimestamp(),
       buildTicketEmbed(ticket),
     ],
@@ -295,7 +288,7 @@ async function openTicket(interaction, type) {
             '**EN:** Post a screenshot of your **F1 in-game stats** (shown above) in this ticket and an officer will verify you.\n\n' +
             '**FR:** Publiez une capture d\'écran de vos **statistiques F1 en jeu** (affichées ci-dessus) dans ce ticket et un officier vous vérifiera.'
           )
-          .setFooter({ text: '⚔️ HUSS Ticket System  •  Thank you for joining us!' })
+          .setFooter({ text: 'Qualification Ticket System  •  Thank you for joining us!' })
       ]
     });
   } else if (type === 'ally') {
@@ -314,7 +307,7 @@ async function openTicket(interaction, type) {
             '\u25b8 Une courte description de votre groupe\n' +
             '\u25b8 La capture d\'écran F1 affichée ci-dessus'
           )
-          .setFooter({ text: '⚔️ HUSS Ticket System  •  We look forward to collaborating!' })
+          .setFooter({ text: 'Qualification Ticket System  •  We look forward to collaborating!' })
       ]
     });
   }
@@ -334,7 +327,7 @@ async function openTicket(interaction, type) {
           { name: '👤  User',    value: `<@${user.id}>`,  inline: true },
           { name: '📌  Channel', value: `${channel}`,    inline: true },
         )
-        .setFooter({ text: '⚔️ HUSS Ticket System' })
+        .setFooter({ text: 'Qualification Ticket System' })
         .setTimestamp();
 
       const jumpRow = new ActionRowBuilder().addComponents(
@@ -379,7 +372,7 @@ async function closeTicket(interaction, channelId, reason) {
           { name: '🔒  Closed by',  value: `<@${interaction.user.id}>`,                                    inline: true },
           { name: '📝  Reason',     value: reason ?? '*No reason provided*',                               inline: true },
         )
-        .setFooter({ text: '⚔️ HUSS Ticket System' })
+        .setFooter({ text: 'Qualification Ticket System' })
         .setTimestamp();
 
       const transcriptFilename = `ticket-${interaction.guildId}-${channelId}-${Date.now()}.html`;
@@ -502,7 +495,7 @@ async function closeTicket(interaction, channelId, reason) {
               `> Closed by <@${interaction.user.id}>\n` +
               `> **Reason:** ${reason}`
             )
-            .setFooter({ text: '⚔️ HUSS Ticket System' })
+            .setFooter({ text: 'Qualification Ticket System' })
             .setTimestamp(),
         ],
       }).catch(() => {});
@@ -530,11 +523,11 @@ module.exports = {
         '> *Sélectionnez une catégorie ci-dessous pour ouvrir un **ticket privé** avec nos officiers.*'
       )
       .addFields(
-        { name: '✅  Verification',     value: 'Become a verified HUSS member.\n*Devenez un membre vérifié de HUSS.*' },
+        { name: '✅  Verification',     value: 'Complete your qualification verification.\n*Complétez votre vérification de qualification.*' },
         { name: '🤝  Ally Request',     value: 'Request a formal alliance with us.\n*Demandez une alliance formelle avec nous.*' },
         { name: '🎖️  Officer Question', value: 'Ask the officer team something privately.\n*Posez une question privée aux officiers.*' },
       )
-      .setFooter({ text: '⚔️ HUSS Command' })
+      .setFooter({ text: 'Qualification Command' })
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(

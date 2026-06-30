@@ -12,14 +12,11 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const { getConfig, getAllConfig } = require('../utils/config');
+const { isOfficer } = require('../utils/permissions');
+const { ROLE_IDS } = require('../utils/roleIds');
 
 const DEFAULT_PANEL_CHANNEL_ID = '1509618529274560733';
-const OFFICER_RANKS    = ['Officer', 'Commander'];
-const DEFAULT_WAR_ROLE_ID = '1424722021325082625';
-
-function isOfficer(member) {
-  return member.roles.cache.some(r => OFFICER_RANKS.includes(r.name));
-}
+const DEFAULT_WAR_ROLE_ID = ROLE_IDS.ACTIVE_WAR_ROLE_ID;
 
 function getWarRoleId(guildId) {
   return getConfig(guildId, 'ACTIVE_WAR_ROLE_ID') ?? DEFAULT_WAR_ROLE_ID;
@@ -75,7 +72,7 @@ function buildKCEmbed(war) {
       { name: '📋 Submissions', value: submissions  },
       { name: '📊 Total kills', value: `${total}`, inline: true },
     )
-    .setFooter({ text: `Started by ${war.startedByName} • Powered by Hypha` })
+    .setFooter({ text: `Started by ${war.startedByName} • Qualification Bot` })
     .setTimestamp(war.startedAt);
 }
 
@@ -91,9 +88,9 @@ function buildKCPanelRow(msgId) {
 const ROLLOVER_STORE_PATH = path.join(__dirname, '..', 'data', 'rollover.json');
 const ROLLOVER_DAYS       = 4;
 const ROLLOVER_MS         = ROLLOVER_DAYS * 24 * 60 * 60 * 1000;
-const COLLIE_ROLE_ID      = '1386230860587733123';
-const UNVERIFIED_ROLE_ID  = '1386229683963826346';
-const FORMER_MEMBER_ROLE_ID = '1426128855202271242';
+const COLLIE_ROLE_ID      = ROLE_IDS.ACTIVE_WAR_ROLE_ID;
+const UNVERIFIED_ROLE_ID  = ROLE_IDS.UNVERIFIED_ROLE_ID;
+const FORMER_MEMBER_ROLE_ID = ROLE_IDS.FORMER_MEMBER_ROLE_ID;
 
 function readRolloverStore() {
   if (!fs.existsSync(ROLLOVER_STORE_PATH)) return { guilds: {} };
@@ -118,7 +115,7 @@ function buildTicketPanelEmbed() {
       { name: '🤝 Ally Request',     value: 'Request an alliance with our group. / Demandez une alliance avec notre groupe.' },
       { name: '🎖️ Officer Question', value: 'Ask the officer team a private question. / Posez une question privée à l’équipe des officiers.' },
     )
-    .setFooter({ text: 'Powered by Hypha' });
+    .setFooter({ text: 'Qualification Bot' });
 }
 
 function buildTicketPanelRow() {
@@ -137,7 +134,7 @@ function buildSignupEmbed(guild) {
     .setColor(0xE74C3C)
     .setTitle('Activity Check')
     .setDescription(`We are preparing for a new war and need to know who is ready to ride.\n\nClick **Mark Active** below to add yourself to the **${roleName}** roster.\nClick again to remove yourself.`)
-    .setFooter({ text: 'Powered by Hypha' })
+    .setFooter({ text: 'Qualification Bot' })
     .setTimestamp();
 }
 
@@ -239,7 +236,7 @@ function buildPanelEmbed() {
       { name: '🔄 Rollover',          value: '⏳ Manually schedule the 4-day rollover\n✋ Cancel a pending rollover' },
       { name: '⚙️ Config',            value: '⚙️ View current bot configuration for this server' },
     )
-    .setFooter({ text: 'Powered by Hypha' });
+    .setFooter({ text: 'Qualification Bot' });
 }
 
 function buildPanelRows() {
@@ -350,7 +347,7 @@ module.exports = {
         .setTitle('⏳ Rollover Scheduled')
         .setDescription(`In **${ROLLOVER_DAYS} days**, all members with <@&${COLLIE_ROLE_ID}> will automatically be moved to <@&${UNVERIFIED_ROLE_ID}> and <@&${FORMER_MEMBER_ROLE_ID}>.`)
         .addFields({ name: 'Executes at', value: `<t:${timestamp}:F> (<t:${timestamp}:R>)` })
-        .setFooter({ text: `Scheduled by ${interaction.user.tag} • Powered by Hypha` })
+        .setFooter({ text: `Scheduled by ${interaction.user.tag} • Qualification Bot` })
         .setTimestamp();
 
       return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -398,7 +395,7 @@ module.exports = {
         .setColor(0x5865F2)
         .setTitle(`⚙️ Bot Config — ${interaction.guild.name}`)
         .addFields(fields)
-        .setFooter({ text: 'Use /config set-channel to update • Powered by Hypha' })
+        .setFooter({ text: 'Use /config set-channel to update • Qualification Bot' })
         .setTimestamp();
 
       return interaction.reply({ embeds: [embed], ephemeral: true });

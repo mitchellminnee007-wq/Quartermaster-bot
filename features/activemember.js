@@ -6,13 +6,10 @@ const {
   ButtonStyle
 } = require('discord.js');
 const { getConfig } = require('../utils/config');
+const { isOfficer } = require('../utils/permissions');
+const { ROLE_IDS } = require('../utils/roleIds');
 
-const DEFAULT_ACTIVITY_ROLE_ID = '1424722021325082625';
-const OFFICER_RANKS = ['Officer', 'Commander'];
-
-function isOfficer(member) {
-  return member.roles.cache.some(r => OFFICER_RANKS.includes(r.name));
-}
+const DEFAULT_ACTIVITY_ROLE_ID = ROLE_IDS.ACTIVE_WAR_ROLE_ID;
 
 function getActivityRoleId(guildId) {
   return getConfig(guildId, 'ACTIVE_WAR_ROLE_ID') ?? DEFAULT_ACTIVITY_ROLE_ID;
@@ -48,7 +45,7 @@ module.exports = {
       .setColor(0xE74C3C)
       .setTitle('Activity Check')
       .setDescription(`We are preparing for a new war and need to know who is ready to ride.\n\nClick **Mark Active** below to add yourself to the **${roleName}** roster.\nClick again to remove yourself.`)
-      .setFooter({ text: 'Powered by Hypha' })
+      .setFooter({ text: 'Qualification Bot' })
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
@@ -143,7 +140,7 @@ module.exports = {
           name: `Active (${count})`,
           value: memberList.length > 1024 ? memberList.slice(0, 1021) + '...' : memberList
         })
-        .setFooter({ text: `Role: ${role.name} • Powered by Hypha` })
+        .setFooter({ text: `Role: ${role.name} • Qualification Bot` })
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });

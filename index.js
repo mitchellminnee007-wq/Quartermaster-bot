@@ -56,7 +56,7 @@ for (const dir of commandDirs) {
 
 client.once(Events.ClientReady, () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity('Powered by Hypha', { type: ActivityType.Playing });
+  client.user.setActivity('Managing Qualifications', { type: ActivityType.Playing });
 });
 
 client.on(Events.InteractionCreate, async interaction => {

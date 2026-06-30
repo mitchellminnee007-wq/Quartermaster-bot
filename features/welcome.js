@@ -51,7 +51,7 @@ module.exports = (client) => {
         .setDescription(`Hello ${member}, welcome aboard! Please complete verification in ${verificationMention} and read ${rulesMention} to join the ranks.\nBonjour ${member}, bienvenue à bord ! Veuillez compléter la vérification dans ${verificationMention} et lire ${rulesMention} pour rejoindre les rangs.`)
         .setColor(0xff0000)
         .setThumbnail(member.user.displayAvatarURL({ extension: 'png', size: 256 }))
-        .setFooter({ text: 'HUSS HQ • Hail Mike.' })
+        .setFooter({ text: 'Qualification Bot • Welcome aboard.' })
         .setTimestamp();
 
       const messagePayload = {

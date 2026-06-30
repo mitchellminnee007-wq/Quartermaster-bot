@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getConfig } = require('../utils/config.js');
+const { isOfficer, isBotAdmin } = require('../utils/permissions');
+const { ROLE_IDS } = require('../utils/roleIds');
 
 const ranks = ['Cadet', 'Private', 'Legionaire', 'Dragoon', 'Hussar', 'Officer', 'Commander'];
 
@@ -10,6 +12,13 @@ function getMemberRank(member) {
 function getRoleByName(guild, roleName) {
   const normalized = roleName.toLowerCase();
   return guild.roles.cache.find(role => role.name.toLowerCase() === normalized) || null;
+}
+
+function getRoleByIdOrName(guild, roleId, fallbackName) {
+  if (roleId && guild.roles.cache.has(roleId)) {
+    return guild.roles.cache.get(roleId);
+  }
+  return getRoleByName(guild, fallbackName);
 }
 
 function getMemberRankRoles(member) {
@@ -43,15 +52,16 @@ module.exports = {
 
     const executor = interaction.member;
     const executorRank = getMemberRank(executor);
-    if (executorRank !== 'Officer' && executorRank !== 'Commander') {
+    const botAdmin = isBotAdmin(executor);
+    if (!isOfficer(executor)) {
       return interaction.reply({ content: 'Only Officers and Commanders can discharge members.', ephemeral: true });
     }
 
-    if (executorRank === 'Commander' && target.id === executor.id) {
+    if (!botAdmin && executorRank === 'Commander' && target.id === executor.id) {
       return interaction.reply({ content: 'A Commander cannot discharge themselves.', ephemeral: true });
     }
 
-    const unverifiedRole = getRoleByName(interaction.guild, 'unverified');
+    const unverifiedRole = getRoleByIdOrName(interaction.guild, ROLE_IDS.GUEST_ROLE_ID, 'unverified');
     if (!unverifiedRole) {
       return interaction.reply({ content: 'The role "unverified" does not exist on this server.', ephemeral: true });
     }
@@ -60,11 +70,11 @@ module.exports = {
     const formerMemberRole = formerMemberRoleId ? interaction.guild.roles.cache.get(formerMemberRoleId) : null;
 
     const targetRank = getMemberRank(target);
-    if (targetRank && !canAffectRank(executorRank, targetRank)) {
+    if (!botAdmin && targetRank && !canAffectRank(executorRank, targetRank)) {
       return interaction.reply({ content: 'Officers cannot discharge other Officers or the Commander.', ephemeral: true });
     }
 
-    const memberRole = getRoleByName(interaction.guild, 'Member');
+    const memberRole = getRoleByIdOrName(interaction.guild, ROLE_IDS.MEMBER_ROLE_ID, 'Member');
     const rolesToRemove = [
       ...getMemberRankRoles(target).map(rank => getRoleByName(interaction.guild, rank)),
       memberRole

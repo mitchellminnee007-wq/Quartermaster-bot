@@ -12,10 +12,10 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const { getConfig } = require('../utils/config');
+const { isOfficer } = require('../utils/permissions');
 
 const STORE_PATH                 = path.join(__dirname, '..', 'data', 'trainings.json');
 const DEFAULT_TRAININGS_CHANNEL_ID = '1386239217998233660';
-const OFFICER_RANKS              = ['Officer', 'Commander'];
 const DEFAULT_TIME_ZONE           = 'Europe/Amsterdam';
 const REMINDER_MS                 = 15 * 60 * 1000;
 const MAX_TIMEOUT_MS              = 2 ** 31 - 1;
@@ -85,7 +85,7 @@ async function sendTrainingReminder(client, guildId, msgId, tr) {
           `> **${tr.title}** begins <t:${timestamp}:R> — <t:${timestamp}:t>\n` +
           `> Make sure you're ready and in position.`
         )
-        .setFooter({ text: '⚔️ HUSS Command  •  15-minute reminder' })
+          .setFooter({ text: 'Qualification Command  •  15-minute reminder' })
     ],
     allowedMentions: { users: acceptedIds }
   }).catch(() => null);
@@ -129,10 +129,6 @@ function scheduleAllTrainingReminders(client) {
       scheduleTrainingReminder(client, guildId, msgId, tr);
     }
   }
-}
-
-function isOfficer(member) {
-  return member.roles.cache.some(r => OFFICER_RANKS.includes(r.name));
 }
 
 function getTimeZoneOffsetMs(date, timeZone) {
@@ -302,7 +298,7 @@ function buildTrainingEmbed(tr) {
         inline: false,
       },
     )
-    .setFooter({ text: `⚔️ HUSS Command  •  Organised by ${tr.createdByName}` })
+      .setFooter({ text: `Qualification Command  •  Organised by ${tr.createdByName}` })
     .setTimestamp(tr.createdAt);
 }
 

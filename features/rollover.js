@@ -2,16 +2,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { getConfig } = require('../utils/config');
+const { isOfficer } = require('../utils/permissions');
+const { ROLE_IDS } = require('../utils/roleIds');
 
-const COLLIE_ROLE_ID       = '1386230860587733123';
-const UNVERIFIED_ROLE_ID   = '1386229683963826346';
-const FORMER_MEMBER_ROLE_ID = '1426128855202271242';
+const COLLIE_ROLE_ID       = ROLE_IDS.ACTIVE_WAR_ROLE_ID;
+const UNVERIFIED_ROLE_ID   = ROLE_IDS.UNVERIFIED_ROLE_ID;
+const FORMER_MEMBER_ROLE_ID = ROLE_IDS.FORMER_MEMBER_ROLE_ID;
 
 const ROLLOVER_DAYS   = 4;
 const ROLLOVER_MS     = ROLLOVER_DAYS * 24 * 60 * 60 * 1000;
 const CHECK_INTERVAL  = 5 * 60 * 1000; // check every 5 minutes
 const STORE_PATH      = path.join(__dirname, '..', 'data', 'rollover.json');
-const OFFICER_RANKS   = ['Officer', 'Commander'];
 
 // ── Persistence helpers ───────────────────────────────────────────────────────
 function readStore() {
@@ -24,10 +25,6 @@ function writeStore(data) {
   const dir = path.dirname(STORE_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2));
-}
-
-function isOfficer(member) {
-  return member.roles.cache.some(r => OFFICER_RANKS.includes(r.name));
 }
 
 // ── Core rollover logic ───────────────────────────────────────────────────────
@@ -96,7 +93,7 @@ async function executeRollover(guild, notifyChannelId, dryRun = false) {
           { name: 'Members - failed', value: `${membersFailed}`, inline: true },
           { name: 'Notes', value: `Removed ally role: ${allyRole ? `<@&${allyRole.id}>` : '*Not configured*'}\nActive war role: ${activeRole ? `<@&${activeRole.id}>` : '*Not configured (all members will be reset)*'}` + (dryRun ? '\n**Dry run — no role changes were made**' : ''), inline: false }
         )
-        .setFooter({ text: 'Powered by Hypha' })
+        .setFooter({ text: 'Qualification Bot' })
         .setTimestamp();
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
@@ -142,7 +139,7 @@ module.exports = {
       .setTitle('⏳ Rollover Scheduled')
       .setDescription(`In **${ROLLOVER_DAYS} days**, allies will have their ally role cleared and members without the active war role will be moved to <@&${UNVERIFIED_ROLE_ID}> and <@&${FORMER_MEMBER_ROLE_ID}>.`)
       .addFields({ name: 'Executes at', value: `<t:${timestamp}:F> (<t:${timestamp}:R>)` })
-      .setFooter({ text: `Scheduled by ${interaction.user.tag} • Powered by Hypha` })
+      .setFooter({ text: `Scheduled by ${interaction.user.tag} • Qualification Bot` })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });

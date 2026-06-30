@@ -1,4 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { isOfficer } = require('../utils/permissions');
+const { ROLE_IDS } = require('../utils/roleIds');
 
 const officerRanks = ['Officer', 'Commander'];
 
@@ -7,8 +9,11 @@ function getRoleByName(guild, roleName) {
   return guild.roles.cache.find(role => role.name.toLowerCase() === normalized) || null;
 }
 
-function getMemberOfficerRank(member) {
-  return officerRanks.find(rank => member.roles.cache.some(role => role.name === rank)) || null;
+function getRoleByIdOrName(guild, roleId, fallbackName) {
+  if (roleId && guild.roles.cache.has(roleId)) {
+    return guild.roles.cache.get(roleId);
+  }
+  return getRoleByName(guild, fallbackName);
 }
 
 module.exports = {
@@ -29,12 +34,11 @@ module.exports = {
     }
 
     const executor = interaction.member;
-    const executorRank = getMemberOfficerRank(executor);
-    if (!executorRank) {
+    if (!isOfficer(executor)) {
       return interaction.reply({ content: 'Only Officers and Commanders can promote allies.', ephemeral: true });
     }
 
-    const allyRole = getRoleByName(interaction.guild, 'Ally');
+    const allyRole = getRoleByIdOrName(interaction.guild, ROLE_IDS.ALLY_ROLE_ID, 'Ally');
     if (!allyRole) {
       return interaction.reply({ content: 'The role "Ally" does not exist on this server.', ephemeral: true });
     }
@@ -45,8 +49,9 @@ module.exports = {
 
     await target.roles.add(allyRole);
 
-    const cleanupRoles = ['unverified']
-      .map(roleName => getRoleByName(interaction.guild, roleName))
+    const cleanupRoles = [
+      getRoleByIdOrName(interaction.guild, ROLE_IDS.GUEST_ROLE_ID, 'unverified'),
+    ]
       .filter(role => role && target.roles.cache.has(role.id));
 
     if (cleanupRoles.length) {

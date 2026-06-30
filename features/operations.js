@@ -12,10 +12,10 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const { getConfig } = require('../utils/config');
+const { isOfficer } = require('../utils/permissions');
 
 const STORE_PATH              = path.join(__dirname, '..', 'data', 'operations.json');
 const DEFAULT_OPS_CHANNEL_ID  = '1386239322209910885';
-const OFFICER_RANKS           = ['Officer', 'Commander'];
 const DEFAULT_TIME_ZONE        = 'Europe/Amsterdam';
 const REMINDER_MS              = 15 * 60 * 1000;
 const MAX_TIMEOUT_MS           = 2 ** 31 - 1;
@@ -85,7 +85,7 @@ async function sendOperationReminder(client, guildId, msgId, op) {
           `> **${op.title}** begins <t:${timestamp}:R> — <t:${timestamp}:t>\n` +
           `> Gear up and stand by for deployment.`
         )
-        .setFooter({ text: '⚔️ HUSS Command  •  15-minute reminder' })
+          .setFooter({ text: 'Qualification Command  •  15-minute reminder' })
     ],
     allowedMentions: { users: acceptedIds }
   }).catch(() => null);
@@ -129,10 +129,6 @@ function scheduleAllOperationReminders(client) {
       scheduleOperationReminder(client, guildId, msgId, op);
     }
   }
-}
-
-function isOfficer(member) {
-  return member.roles.cache.some(r => OFFICER_RANKS.includes(r.name));
 }
 
 function getTimeZoneOffsetMs(date, timeZone) {
@@ -292,7 +288,7 @@ function buildOpEmbed(op) {
         inline: true,
       },
     )
-    .setFooter({ text: `Created by ${op.createdByName} • Powered by Hypha` })
+      .setFooter({ text: `Created by ${op.createdByName} • Qualification Bot` })
     .setTimestamp(op.createdAt);
 }
 
