@@ -15,7 +15,7 @@ const { getConfig, getAllConfig } = require('../utils/config');
 const { isOfficer } = require('../utils/permissions');
 const { ROLE_IDS } = require('../utils/roleIds');
 
-const DEFAULT_PANEL_CHANNEL_ID = '1509618529274560733';
+const DEFAULT_PANEL_CHANNEL_ID = '1521530552631689478';
 const DEFAULT_WAR_ROLE_ID = ROLE_IDS.ACTIVE_WAR_ROLE_ID;
 
 function getWarRoleId(guildId) {
