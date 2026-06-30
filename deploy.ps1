@@ -31,9 +31,21 @@ if (-not (Test-Path $EnvFile)) {
 }
 
 # Validate required values for a fresh production deploy
-$EnvText = Get-Content $EnvFile -Raw
+$EnvMap = @{}
+Get-Content $EnvFile | ForEach-Object {
+    $line = $_.Trim()
+    if (-not $line -or $line.StartsWith("#")) { return }
+
+    $parts = $line.Split("=", 2)
+    if ($parts.Count -ne 2) { return }
+
+    $key = $parts[0].Trim()
+    $value = $parts[1].Trim()
+    if ($key) { $EnvMap[$key] = $value }
+}
+
 foreach ($RequiredKey in @("DISCORD_TOKEN", "CLIENT_ID")) {
-    if ($EnvText -notmatch "(?m)^$RequiredKey\s*=\s*\S+") {
+    if (-not $EnvMap.ContainsKey($RequiredKey) -or [string]::IsNullOrWhiteSpace($EnvMap[$RequiredKey])) {
         Write-Error "Missing required $RequiredKey value in .env. Aborting."
         exit 1
     }
@@ -56,14 +68,7 @@ Remove-Item $TarPath -Force
 
 # ── Extract on VPS and run deploy.sh ─────────────────────────────────────────
 Write-Host "[3/4] Extracting and deploying on VPS..." -ForegroundColor Yellow
-$SshCommand = @"
-set -e
-mkdir -p '$REMOTE'
-tar -xzf '$RemoteTar' -C '$REMOTE'
-rm -f '$RemoteTar'
-sed -i 's/\r$//' '$REMOTE/deploy.sh'
-bash '$REMOTE/deploy.sh'
-"@
+$SshCommand = "set -e; mkdir -p '$REMOTE'; tar -xzf '$RemoteTar' -C '$REMOTE'; rm -f '$RemoteTar'; sed -i 's/\r$//' '$REMOTE/deploy.sh'; chmod +x '$REMOTE/deploy.sh'; bash '$REMOTE/deploy.sh'"
 ssh $VPS $SshCommand
 if ($LASTEXITCODE -ne 0) { Write-Error "Remote deploy failed."; exit 1 }
 
