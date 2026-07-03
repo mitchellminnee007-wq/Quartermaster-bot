@@ -2,6 +2,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Events, EmbedBuilder } = require('discord.js');
 const { getConfig } = require('../utils/config');
+const {
+  ROLE_IDS,
+  ZERO_SUM_SOURCE_GUILD_ID,
+  ZERO_SUM_VERIFIED_ROLE_IDS,
+} = require('../utils/roleIds');
+
+const ALLIED_TARGET_GUILD_ID = '1521261614484033728';
 
 function getRoleByName(guild, roleName) {
   const normalized = roleName.toLowerCase();
@@ -29,6 +36,38 @@ module.exports = (client) => {
         await member.roles.add(unverifiedRole).catch(err => console.error('Failed to add unverified role to new member:', err));
       } else if (!unverifiedRole) {
         console.warn('Could not find unverified role.');
+      }
+
+      if (member.guild.id === ALLIED_TARGET_GUILD_ID) {
+        try {
+          const zeroSumGuild = client.guilds.cache.get(ZERO_SUM_SOURCE_GUILD_ID)
+            || await client.guilds.fetch(ZERO_SUM_SOURCE_GUILD_ID).catch(() => null);
+
+          if (!zeroSumGuild) {
+            console.warn('Could not find ZERO_SUM guild for allied verification.');
+          } else {
+            const zeroSumMember = await zeroSumGuild.members.fetch(member.id).catch(() => null);
+            if (zeroSumMember) {
+              const isVerifiedInZeroSum = ZERO_SUM_VERIFIED_ROLE_IDS.some(roleId => zeroSumMember.roles.cache.has(roleId));
+
+              if (isVerifiedInZeroSum) {
+                const roleIdsToAdd = [ROLE_IDS.MEMBER_ROLE_ID, ROLE_IDS.ZERO_SUM_ROLE_ID]
+                  .filter(Boolean)
+                  .filter(roleId => !member.roles.cache.has(roleId));
+
+                if (roleIdsToAdd.length > 0) {
+                  await member.roles.add(roleIdsToAdd, 'Auto-verified from ZERO_SUM alliance roles');
+                }
+
+                if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
+                  await member.roles.remove(unverifiedRole.id).catch(err => console.error('Failed removing unverified role after allied verification:', err));
+                }
+              }
+            }
+          }
+        } catch (alliedVerificationError) {
+          console.error('Allied verification check failed:', alliedVerificationError);
+        }
       }
 
       const verificationMention = verificationChannelId ? `<#${verificationChannelId}>` : 'the verification channel';
