@@ -6,6 +6,8 @@ const {
   ROLE_IDS,
   ZERO_SUM_SOURCE_GUILD_ID,
   ZERO_SUM_VERIFIED_ROLE_IDS,
+  HUSS_SOURCE_GUILD_ID,
+  HUSS_VERIFIED_ROLE_IDS,
 } = require('../utils/roleIds');
 
 const ALLIED_TARGET_GUILD_ID = '1521261614484033728';
@@ -13,6 +15,22 @@ const ALLIED_TARGET_GUILD_ID = '1521261614484033728';
 function getRoleByName(guild, roleName) {
   const normalized = roleName.toLowerCase();
   return guild.roles.cache.find(role => role.name.toLowerCase() === normalized) || null;
+}
+
+async function hasAnySourceRole(client, userId, sourceGuildId, roleIds) {
+  const sourceGuild = client.guilds.cache.get(sourceGuildId)
+    || await client.guilds.fetch(sourceGuildId).catch(() => null);
+
+  if (!sourceGuild) {
+    return false;
+  }
+
+  const sourceMember = await sourceGuild.members.fetch(userId).catch(() => null);
+  if (!sourceMember) {
+    return false;
+  }
+
+  return roleIds.some(roleId => sourceMember.roles.cache.has(roleId));
 }
 
 module.exports = (client) => {
@@ -40,30 +58,42 @@ module.exports = (client) => {
 
       if (member.guild.id === ALLIED_TARGET_GUILD_ID) {
         try {
-          const zeroSumGuild = client.guilds.cache.get(ZERO_SUM_SOURCE_GUILD_ID)
-            || await client.guilds.fetch(ZERO_SUM_SOURCE_GUILD_ID).catch(() => null);
+          const roleIdsToAdd = new Set();
+          let isAutoVerified = false;
 
-          if (!zeroSumGuild) {
-            console.warn('Could not find ZERO_SUM guild for allied verification.');
-          } else {
-            const zeroSumMember = await zeroSumGuild.members.fetch(member.id).catch(() => null);
-            if (zeroSumMember) {
-              const isVerifiedInZeroSum = ZERO_SUM_VERIFIED_ROLE_IDS.some(roleId => zeroSumMember.roles.cache.has(roleId));
+          const isVerifiedInZeroSum = await hasAnySourceRole(
+            client,
+            member.id,
+            ZERO_SUM_SOURCE_GUILD_ID,
+            ZERO_SUM_VERIFIED_ROLE_IDS,
+          );
+          if (isVerifiedInZeroSum) {
+            isAutoVerified = true;
+            roleIdsToAdd.add(ROLE_IDS.MEMBER_ROLE_ID);
+            roleIdsToAdd.add(ROLE_IDS.ZERO_SUM_ROLE_ID);
+          }
 
-              if (isVerifiedInZeroSum) {
-                const roleIdsToAdd = [ROLE_IDS.MEMBER_ROLE_ID, ROLE_IDS.ZERO_SUM_ROLE_ID]
-                  .filter(Boolean)
-                  .filter(roleId => !member.roles.cache.has(roleId));
+          const isVerifiedInHuss = await hasAnySourceRole(
+            client,
+            member.id,
+            HUSS_SOURCE_GUILD_ID,
+            HUSS_VERIFIED_ROLE_IDS,
+          );
+          if (isVerifiedInHuss) {
+            isAutoVerified = true;
+            roleIdsToAdd.add(ROLE_IDS.HUSS_ROLE_ID);
+          }
 
-                if (roleIdsToAdd.length > 0) {
-                  await member.roles.add(roleIdsToAdd, 'Auto-verified from ZERO_SUM alliance roles');
-                }
+          const missingRoleIds = [...roleIdsToAdd]
+            .filter(Boolean)
+            .filter(roleId => !member.roles.cache.has(roleId));
 
-                if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
-                  await member.roles.remove(unverifiedRole.id).catch(err => console.error('Failed removing unverified role after allied verification:', err));
-                }
-              }
-            }
+          if (missingRoleIds.length > 0) {
+            await member.roles.add(missingRoleIds, 'Auto-verified from allied regiment roles');
+          }
+
+          if (isAutoVerified && unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
+            await member.roles.remove(unverifiedRole.id).catch(err => console.error('Failed removing unverified role after allied verification:', err));
           }
         } catch (alliedVerificationError) {
           console.error('Allied verification check failed:', alliedVerificationError);
