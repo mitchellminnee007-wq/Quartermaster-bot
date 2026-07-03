@@ -6,8 +6,10 @@ const {
   ROLE_IDS,
   ZERO_SUM_SOURCE_GUILD_ID,
   ZERO_SUM_VERIFIED_ROLE_IDS,
+  ZERO_SUM_OFFICER_ROLE_IDS,
   HUSS_SOURCE_GUILD_ID,
   HUSS_VERIFIED_ROLE_IDS,
+  HUSS_OFFICER_ROLE_IDS,
 } = require('../utils/roleIds');
 
 const ALLIED_TARGET_GUILD_ID = '1521261614484033728';
@@ -71,6 +73,16 @@ module.exports = (client) => {
             isAutoVerified = true;
             roleIdsToAdd.add(ROLE_IDS.MEMBER_ROLE_ID);
             roleIdsToAdd.add(ROLE_IDS.ZERO_SUM_ROLE_ID);
+
+            const isZeroSumOfficer = await hasAnySourceRole(
+              client,
+              member.id,
+              ZERO_SUM_SOURCE_GUILD_ID,
+              ZERO_SUM_OFFICER_ROLE_IDS,
+            );
+            if (isZeroSumOfficer) {
+              roleIdsToAdd.add(ROLE_IDS.REGIMENT_OFFICER_ROLE_ID);
+            }
           }
 
           const isVerifiedInHuss = await hasAnySourceRole(
@@ -81,7 +93,18 @@ module.exports = (client) => {
           );
           if (isVerifiedInHuss) {
             isAutoVerified = true;
+            roleIdsToAdd.add(ROLE_IDS.MEMBER_ROLE_ID);
             roleIdsToAdd.add(ROLE_IDS.HUSS_ROLE_ID);
+
+            const isHussOfficer = await hasAnySourceRole(
+              client,
+              member.id,
+              HUSS_SOURCE_GUILD_ID,
+              HUSS_OFFICER_ROLE_IDS,
+            );
+            if (isHussOfficer) {
+              roleIdsToAdd.add(ROLE_IDS.REGIMENT_OFFICER_ROLE_ID);
+            }
           }
 
           const missingRoleIds = [...roleIdsToAdd]
@@ -94,6 +117,10 @@ module.exports = (client) => {
 
           if (isAutoVerified && unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
             await member.roles.remove(unverifiedRole.id).catch(err => console.error('Failed removing unverified role after allied verification:', err));
+          }
+
+          if (isAutoVerified && ROLE_IDS.GUEST_ROLE_ID && member.roles.cache.has(ROLE_IDS.GUEST_ROLE_ID)) {
+            await member.roles.remove(ROLE_IDS.GUEST_ROLE_ID).catch(err => console.error('Failed removing guest role after allied verification:', err));
           }
         } catch (alliedVerificationError) {
           console.error('Allied verification check failed:', alliedVerificationError);
