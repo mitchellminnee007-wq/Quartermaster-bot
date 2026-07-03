@@ -1,4 +1,4 @@
-# deploy.ps1 — Run this from your project folder on Windows
+# deploy.ps1 - Run this from your project folder on Windows
 # Usage: .\deploy.ps1 [-Vps "user@host"] [-RemoteBase "/root"]
 # Requires: OpenSSH + tar (both built into Windows 10/11)
 
@@ -16,14 +16,14 @@ $TarPath    = Join-Path $env:TEMP "$ProjectName-deploy.tar.gz"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  Discord Bot — Windows Deploy Script"      -ForegroundColor Cyan
+Write-Host "  Discord Bot - Windows Deploy Script"      -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Project: $ProjectName" -ForegroundColor Cyan
 Write-Host "Target : ${VPS}:$REMOTE" -ForegroundColor Cyan
 Write-Host ""
 
-# ── Verify local .env exists ──────────────────────────────────────────────────
+# -- Verify local .env exists --------------------------------------------------
 ${EnvFile} = Join-Path $ProjectDir ".env"
 if (-not (Test-Path $EnvFile)) {
     Write-Error ".env not found in $ProjectDir. Aborting."
@@ -51,7 +51,7 @@ foreach ($RequiredKey in @("DISCORD_TOKEN", "CLIENT_ID")) {
     }
 }
 
-# ── Pack project into a tar (excluding node_modules and .git) ─────────────────
+# -- Pack project into a tar (excluding node_modules and .git) -----------------
 Write-Host "[1/4] Creating archive (excluding node_modules / .git)..." -ForegroundColor Yellow
 if (Test-Path $TarPath) { Remove-Item $TarPath -Force }
 tar -czf $TarPath `
@@ -60,13 +60,13 @@ tar -czf $TarPath `
     -C $ProjectDir .
 if ($LASTEXITCODE -ne 0) { Write-Error "tar failed."; exit 1 }
 
-# ── Upload archive to VPS ─────────────────────────────────────────────────────
+# -- Upload archive to VPS -----------------------------------------------------
 Write-Host "[2/4] Uploading archive to VPS..." -ForegroundColor Yellow
 scp $TarPath "${VPS}:$RemoteTar"
 if ($LASTEXITCODE -ne 0) { Write-Error "SCP upload failed."; exit 1 }
 Remove-Item $TarPath -Force
 
-# ── Extract on VPS and run deploy.sh ─────────────────────────────────────────
+# -- Extract on VPS and run deploy.sh ------------------------------------------
 Write-Host "[3/4] Extracting and deploying on VPS..." -ForegroundColor Yellow
 $SshCommand = "set -e; mkdir -p '$REMOTE'; tar -xzf '$RemoteTar' -C '$REMOTE'; rm -f '$RemoteTar'; sed -i 's/\r$//' '$REMOTE/deploy.sh'; chmod +x '$REMOTE/deploy.sh'; bash '$REMOTE/deploy.sh'"
 ssh $VPS $SshCommand
