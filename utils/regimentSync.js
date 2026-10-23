@@ -4,7 +4,13 @@ const { ROLE_IDS } = require('./roleIds');
 const { getLegacySources } = require('./legacyRegiments');
 const LOL_GUILD_ID = '1521261614484033728';
 const TARGET = { member: ROLE_IDS.MEMBER_ROLE_ID, officer: ROLE_IDS.REGIMENT_OFFICER_ROLE_ID, commander: ROLE_IDS.REGIMENTAL_LEADER_ROLE_ID };
-function errorText(e) { return `Sync failed (${e.code || e.name || 'unknown'}). Check bot access, role hierarchy and server availability.`; }
+function syncFailure(code, message) { return Object.assign(new Error(message), { syncCode: code, safeDetail: message }); }
+function errorText(e) {
+  if (e.syncCode && e.safeDetail) return `Sync failed (${e.syncCode}): ${e.safeDetail}`;
+  const known = { 50013: 'Discord denied permission. Check Manage Roles and the target role hierarchy in LOL.', 50001: 'Discord denied access to the requested server or resource.', 10004: 'Discord could not find the source or coalition server.', 10011: 'Discord could not find the configured role.', GuildMembersTimeout: 'Fetching server members timed out. Check Guild Members intent and connection; retry later.' };
+  const code = Object.hasOwn(known, e.code) ? e.code : 'UNCLASSIFIED';
+  return `Sync failed (${code}): ${known[code] || 'An unexpected operation failed. No raw API or secret details are displayed.'}`;
+}
 async function memberOrNull(guild, id) {
   try { return await guild.members.fetch({ user: id, force: true }); }
   catch (e) { if (e.code === 10007) return null; throw e; }
@@ -14,16 +20,19 @@ class RegimentService {
   run(fn) { const next = this.tail.then(fn); this.tail = next.catch(() => {}); return next; }
   async guild(id) {
     const guild = this.client.guilds.cache.get(id);
-    if (!guild || guild.available === false) throw new Error('Source or coalition server unavailable');
+    if (!guild || guild.available === false) throw syncFailure('SERVER_UNAVAILABLE', `Server ${id} is absent from the bot cache or unavailable.`);
     return guild;
   }
-  async desired(userId, data) {
+  async desired(userId, data, context = {}) {
+    const sourceMembers = new Map();
     const roles = new Set();
     for (const r of data.regiments.filter(r => r.status === 'active')) {
       const guild = await this.guild(r.guildId);
-      await guild.roles.fetch();
-      if (!guild.roles.cache.has(r.memberRoleId) || !guild.roles.cache.has(r.officerRoleId)) throw new Error('Mapped source role was deleted');
-      const m = await memberOrNull(guild, userId);
+      context.rolesFetched ||= new Set();
+      if (!context.rolesFetched.has(guild.id)) { await guild.roles.fetch(); context.rolesFetched.add(guild.id); }
+      if (!guild.roles.cache.has(r.memberRoleId) || !guild.roles.cache.has(r.officerRoleId)) throw syncFailure('SOURCE_ROLE_MISSING', `Server ${r.guildId}: Member ${r.memberRoleId} or Officer ${r.officerRoleId} no longer exists.`);
+      const m = sourceMembers.has(guild.id) ? sourceMembers.get(guild.id) : await memberOrNull(guild, userId);
+      sourceMembers.set(guild.id, m);
       if (!m) continue;
       if (!(r.seenUsers || []).includes(userId)) this.store.change(d => { const current = d.regiments.find(x => x.id === r.id); if (current) current.seenUsers = [...new Set([...(current.seenUsers || []), userId])]; });
       if (m.roles.cache.has(r.memberRoleId)) roles.add(TARGET.member);
@@ -35,27 +44,33 @@ class RegimentService {
       if (data.regiments.some(r => r.guildId === source.guildId && !r.legacyCompatibility) || (data.disabledLegacy || []).includes(source.guildId)) continue;
       const guild = this.client.guilds.cache.get(source.guildId);
       if (!guild) continue;
-      if (guild.available === false) throw new Error('Legacy source unavailable');
-      const m = await memberOrNull(guild, userId);
+      if (guild.available === false) throw syncFailure('LEGACY_UNAVAILABLE', `Legacy server ${source.guildId} is temporarily unavailable.`);
+      const m = sourceMembers.has(guild.id) ? sourceMembers.get(guild.id) : await memberOrNull(guild, userId);
+      sourceMembers.set(guild.id, m);
       if (!m) continue;
       if (source.members.some(id => m.roles.cache.has(id))) roles.add(TARGET.member);
       if (source.officers.some(id => m.roles.cache.has(id))) roles.add(TARGET.officer);
     }
     return roles;
   }
-  async syncUser(userId) {
+  async syncUser(userId, context = {}) {
+    try { return await this.syncUserRaw(userId, context); }
+    catch (e) { e.isSyncError = true; throw e; }
+  }
+  async syncUserRaw(userId, context) {
     const data = this.store.read();
     const coalition = await this.guild(LOL_GUILD_ID);
     const member = await memberOrNull(coalition, userId);
     if (!member) { this.store.change(d => { delete d.grants[userId]; }); return; }
-    const desired = await this.desired(userId, data);
-    await coalition.roles.fetch();
+    const desired = await this.desired(userId, data, context);
+    context.rolesFetched ||= new Set();
+    if (!context.rolesFetched.has(coalition.id)) { await coalition.roles.fetch(); context.rolesFetched.add(coalition.id); }
     const me = await coalition.members.fetchMe();
-    if (!me.permissions.has('ManageRoles')) throw new Error('Bot lacks Manage Roles');
+    if (!me.permissions.has('ManageRoles')) throw syncFailure('MANAGE_ROLES_MISSING', `Bot lacks Manage Roles in LOL (${LOL_GUILD_ID}).`);
     const owned = new Set(data.grants[userId] || []);
     for (const roleId of new Set([...desired, ...owned])) {
       const role = coalition.roles.cache.get(roleId);
-      if (!role || role.managed || role.position >= me.roles.highest.position) throw new Error('Target role missing or not manageable');
+      if (!role || role.managed || role.position >= me.roles.highest.position) throw syncFailure('TARGET_ROLE_UNMANAGEABLE', `LOL role ${roleId} is not manageable: missing, managed, or at/above the bot highest role. Place the bot role above this target role.`);
       if (desired.has(roleId) && !member.roles.cache.has(roleId)) {
         // Durable intent BEFORE API request: recovery can retry or undo after interruption.
         this.store.change(d => { d.grants[userId] = [...new Set([...(d.grants[userId] || []), roleId])]; });
@@ -66,7 +81,12 @@ class RegimentService {
       }
     }
   }
-  async sweep(actor = {}, regimentId = null) {
+  async sweep(actor = {}, regimentId = null, progress = null) {
+    try { return await this.sweepRaw(actor, regimentId, progress); }
+    catch (e) { e.isSyncError = true; throw e; }
+    finally { this.activeSync = null; }
+  }
+  async sweepRaw(actor = {}, regimentId = null, progress = null) {
     const snapshot = this.store.read();
     if (!actor.userId && !snapshot.regiments.some(r => (['deleting', 'suspended'].includes(r.status) || (r.status === 'active' && !r.legacyCompatibility))) && !Object.keys(snapshot.grants).length) return { users: 0, failed: 0 };
     const coalition = await this.guild(LOL_GUILD_ID);
@@ -82,15 +102,25 @@ class RegimentService {
         for (const id of (await source.members.fetch()).keys()) ids.add(id);
       }
     }
-    let failed = 0;
+    // Coalition membership was just fetched. Absent source members need no role API request;
+    // include owned grants so departure cleanup is never skipped. Join events reconcile later joins.
+    ids = new Set([...ids].filter(id => members.has(id) || Object.hasOwn(snapshot.grants, id)));
+    let failed = 0, firstFailure = null, completed = 0;
+    const context = { rolesFetched: new Set() };
+    const update = async () => {
+      this.activeSync = { regimentId, completed, total: ids.size, failed };
+      if (progress) { try { await progress(this.activeSync); } catch { /* Expired interaction must not interrupt durable role reconciliation. */ } }
+    };
+    await update();
     for (const id of ids) {
-      try { await this.syncUser(id); }
-      catch (e) { failed++; this.store.log('sync-error', actor, { subjectUserId: id, error: errorText(e) }); }
+      try { await this.syncUser(id, context); }
+      catch (e) { failed++; firstFailure ||= errorText(e); this.store.log('sync-error', actor, { subjectUserId: id, error: errorText(e) }); }
+      completed++; await update();
     }
     this.store.change(d => {
       for (const r of d.regiments) {
         if ((regimentId && r.id !== regimentId) || !['active', 'deleting', 'suspended'].includes(r.status)) continue;
-        r.syncError = failed ? `${failed} user(s) failed; automatic retry pending.` : null;
+        r.syncError = failed ? `${failed} user(s) failed; ${firstFailure} Automatic retry pending.` : null;
         if (!failed) r.lastSuccessfulSync = new Date().toISOString();
       }
       if (!failed) {
@@ -99,6 +129,7 @@ class RegimentService {
         d.regiments = d.regiments.filter(r => !deleting.some(x => x.id === r.id));
       }
     });
+    this.store.log('sync-completed', actor, { regimentId, users: ids.size, failed });
     return { users: ids.size, failed };
   }
   async remove(id, actor) {
@@ -108,6 +139,11 @@ class RegimentService {
       r.status = 'deleting'; d.disabledLegacy = [...new Set([...(d.disabledLegacy || []), r.guildId])]; this.store.audit(d, 'deletion-requested', actor, { regimentId: id });
     });
     return this.sweep(actor, id);
+  }
+  reportCommand(e, actor = {}, command = 'unknown') {
+    if (e.isSyncError) return this.report(e, actor);
+    const expected = new Set(['You are not authorized for this action.', 'Regiment not found. Use its exact name in LOL or run this in the regiment server.', 'Only approved active regiments can be synchronized.', 'Unsupported control.']);
+    this.store.log('command-error', actor, { command, error: expected.has(e.message) ? e.message : 'Command failed before or outside role synchronization.' });
   }
   report(e, actor = {}) {
     try { this.store.change(d => { this.store.audit(d, 'sync-error', actor, { error: errorText(e) }); for (const r of d.regiments) r.syncError = errorText(e); }); }

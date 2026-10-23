@@ -44,6 +44,14 @@ function panel() {
     new ButtonBuilder().setCustomId('qm:regiment').setLabel('Regiment Role Sync').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('qm:coalition').setLabel('Coalition Role Sync').setStyle(ButtonStyle.Danger));
 }
+function progressReply(i) {
+  let last = 0;
+  return async p => {
+    if (Date.now() - last < 10000 && p.completed !== p.total) return;
+    last = Date.now();
+    await i.editReply({ content: `Role sync in progress: ${p.completed}/${p.total} LOL members checked; ${p.failed} failed. Please do not start another sync.`, allowedMentions: { parse: [] } });
+  };
+}
 async function manual(i, mode, requestedName) {
   const s = service(i.client);
   let r;
@@ -53,7 +61,7 @@ async function manual(i, mode, requestedName) {
   if (r && r.status !== 'active') throw new Error('Only approved active regiments can be synchronized.');
   s.store.log('manual-sync', actor(i), { scope: mode, regimentId: r?.id || null });
   if (mode === 'user') { await s.syncUser(i.user.id); return 'Your roles have been reconciled. Roles can only be assigned while you are a member of LOL.'; }
-  const result = await s.sweep(actor(i), r?.id);
+  const result = await s.sweep(actor(i), r?.id, progressReply(i));
   return `Sync checked ${result.users} coalition users; ${result.failed} failed. Failures are audited and retried. Coalition Role Sync is intended once per war; no artificial limit is imposed.`;
 }
 async function info(i) {
@@ -109,11 +117,11 @@ async function executeRaw(i) {
         s.store.change(d => { const current = d.regiments.find(x => x.id === r.id); current.legacyCompatibility = false; current.memberRoleId = mr.id; current.officerRoleId = or.id; s.store.audit(d, 'mapping-change', actor(i), { regimentId: r.id, previous: { member: r.memberRoleId, officer: r.officerRoleId }, next: { member: mr.id, officer: or.id } }); });
       }
       s.store.log('manual-sync', actor(i), { scope: 'settings', regimentId: r.id });
-      const result = await s.sweep(actor(i), r.id);
+      const result = await s.sweep(actor(i), r.id, progressReply(i));
       return `Settings saved; sync checked ${result.users} users, ${result.failed} failures.`;
     }
   }
-  return `Regiment: ${r.name} [${r.tag}]\nID: ${r.id}\nStatus: ${r.status}\nCommander: <@${r.commanderId}>\nServer: ${r.guildId}\nMember mapping: ${r.memberRoleId}\nOfficer mapping: ${r.officerRoleId}\nRegistered: ${r.registeredAt}\nLast successful full sync: ${r.lastSuccessfulSync || 'Never'}\nSync errors: ${r.syncError || 'None recorded'}\nApproval: ${r.review ? `${r.review.decision} by ${r.review.userId} at ${r.review.timestamp}` : r.status === 'pending_approval' ? 'Awaiting regiment vote' : 'Existing registration'}\nVote status: ${r.poll?.state || 'Existing registration'}\nVote deadline (UTC): ${r.poll?.closesAt || 'Not started'}`;
+  return `Regiment: ${r.name} [${r.tag}]\nID: ${r.id}\nStatus: ${r.status}\nCommander: <@${r.commanderId}>\nServer: ${r.guildId}\nMember mapping: ${r.memberRoleId}\nOfficer mapping: ${r.officerRoleId}\nRegistered: ${r.registeredAt}\nCurrent sync: ${s.activeSync ? `${s.activeSync.completed}/${s.activeSync.total} members checked, ${s.activeSync.failed} failed` : 'No full sync running in this process'}\nLast successful full sync: ${r.lastSuccessfulSync || 'Never'}\nSync errors: ${r.syncError === 'Sync failed (Error). Check bot access, role hierarchy and server availability.' ? 'Historical unclassified error: older code also recorded command failures here. A successful full sync has not been verified.' : r.syncError || 'None recorded'}\nApproval: ${r.review ? `${r.review.decision} by ${r.review.userId} at ${r.review.timestamp}` : r.status === 'pending_approval' ? 'Awaiting regiment vote' : 'Existing registration'}\nVote status: ${r.poll?.state || 'Existing registration'}\nVote deadline (UTC): ${r.poll?.closesAt || 'Not started'}`;
 }
 async function decideApproval() { throw new Error('Direct admin approval is disabled. Admission requires the 48-hour two-level regiment vote.'); }
 async function voteButton(i, s) {
@@ -149,8 +157,8 @@ async function execute(i) {
     return;
   }
   await i.deferReply({ ephemeral: true });
-  try { const result = await s.run(() => executeRaw(i)); await i.editReply({ ...(typeof result === 'string' ? { content: result } : result), allowedMentions: { parse: [] } }); }
-  catch (e) { s.report(e, actor(i)); await i.editReply({ content: e.code ? errorText(e) : e.message, allowedMentions: { parse: [] } }); }
+  try { const result = await (['regiment-status', 'info'].includes(i.commandName) ? executeRaw(i) : s.run(() => executeRaw(i))); await i.editReply({ ...(typeof result === 'string' ? { content: result } : result), allowedMentions: { parse: [] } }); }
+  catch (e) { s.reportCommand(e, actor(i), i.commandName || i.customId); await i.editReply({ content: e.code ? errorText(e) : e.message, allowedMentions: { parse: [] } }); }
 }
 function init(client) {
   service(client);
@@ -165,7 +173,7 @@ function init(client) {
       try {
         const input = new TextInputBuilder().setCustomId('regiment-name').setLabel('Registered regiment name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80);
         await i.showModal(new ModalBuilder().setCustomId('qm:regiment-select').setTitle('Regiment Role Sync').addComponents(new ActionRowBuilder().addComponents(input)));
-      } catch (e) { service(client).report(e, actor(i)); }
+      } catch (e) { service(client).reportCommand(e, actor(i), i.commandName || i.customId); }
       return;
     }
     await i.deferReply({ ephemeral: true });
@@ -188,7 +196,7 @@ function init(client) {
         throw new Error('Unsupported control.');
       });
       await i.editReply({ content: result, allowedMentions: { parse: [] } });
-    } catch (e) { s.report(e, actor(i)); await i.editReply({ content: e.code ? errorText(e) : e.message, allowedMentions: { parse: [] } }); }
+    } catch (e) { s.reportCommand(e, actor(i), i.commandName || i.customId); await i.editReply({ content: e.code ? errorText(e) : e.message, allowedMentions: { parse: [] } }); }
   });
 }
 function definition(name) {
