@@ -2,24 +2,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Events, EmbedBuilder } = require('discord.js');
 const { getConfig } = require('../utils/config');
-const {
-  ROLE_IDS,
-  ZERO_SUM_SOURCE_GUILD_ID,
-  ZERO_SUM_VERIFIED_ROLE_IDS,
-  ZERO_SUM_OFFICER_ROLE_IDS,
-  HUSS_SOURCE_GUILD_ID,
-  HUSS_VERIFIED_ROLE_IDS,
-  HUSS_OFFICER_ROLE_IDS,
-} = require('../utils/roleIds');
+const { ROLE_IDS } = require('../utils/roleIds');
+const { getLegacySources } = require('../utils/legacyRegiments');
 
 const ALLIED_TARGET_GUILD_ID = '1521261614484033728';
 
 function shouldAttemptAlliedVerification(guildId) {
-  return [
-    ALLIED_TARGET_GUILD_ID,
-    ZERO_SUM_SOURCE_GUILD_ID,
-    HUSS_SOURCE_GUILD_ID,
-  ].includes(guildId);
+  return guildId === ALLIED_TARGET_GUILD_ID || getLegacySources().some(s => s.guildId === guildId);
 }
 
 function getRoleByName(guild, roleName) {
@@ -29,7 +18,7 @@ function getRoleByName(guild, roleName) {
 
 async function hasAnySourceRole(client, userId, sourceGuildId, roleIds, roleNames = []) {
   const registry = new (require('../utils/regimentStore').RegimentStore)().read();
-  if (registry.regiments.some(r => r.guildId === sourceGuildId) || (registry.disabledLegacy || []).includes(sourceGuildId)) return false;
+  if (registry.regiments.some(r => r.guildId === sourceGuildId && !r.legacyCompatibility) || (registry.disabledLegacy || []).includes(sourceGuildId)) return false;
   const sourceGuild = client.guilds.cache.get(sourceGuildId)
     || await client.guilds.fetch(sourceGuildId).catch(() => null);
 
@@ -82,54 +71,14 @@ function registerWelcomeHandler(client) {
           const roleIdsToAdd = new Set();
           let isAutoVerified = false;
 
-          const isVerifiedInZeroSum = await hasAnySourceRole(
-            client,
-            member.id,
-            ZERO_SUM_SOURCE_GUILD_ID,
-            ZERO_SUM_VERIFIED_ROLE_IDS,
-            ['CO', 'NCO', 'Enlisted'],
-          );
-          if (isVerifiedInZeroSum) {
-            isAutoVerified = true;
-            roleIdsToAdd.add(ROLE_IDS.MEMBER_ROLE_ID);
-            roleIdsToAdd.add(ROLE_IDS.ZERO_SUM_ROLE_ID);
-
-            const isZeroSumOfficer = await hasAnySourceRole(
-              client,
-              member.id,
-              ZERO_SUM_SOURCE_GUILD_ID,
-              ZERO_SUM_OFFICER_ROLE_IDS,
-              ['CO'],
-            );
-            if (isZeroSumOfficer) {
-              roleIdsToAdd.add(ROLE_IDS.REGIMENT_OFFICER_ROLE_ID);
+          for (const source of getLegacySources()) {
+            if (await hasAnySourceRole(client, member.id, source.guildId, source.members, source.memberRoleNames)) {
+              isAutoVerified = true;
+              roleIdsToAdd.add(ROLE_IDS.MEMBER_ROLE_ID);
+              roleIdsToAdd.add(source.targetTagRoleId);
+              if (await hasAnySourceRole(client, member.id, source.guildId, source.officers, source.officerRoleNames)) roleIdsToAdd.add(ROLE_IDS.REGIMENT_OFFICER_ROLE_ID);
             }
           }
-
-          const isVerifiedInHuss = await hasAnySourceRole(
-            client,
-            member.id,
-            HUSS_SOURCE_GUILD_ID,
-            HUSS_VERIFIED_ROLE_IDS,
-            ['Officer', 'Member'],
-          );
-          if (isVerifiedInHuss) {
-            isAutoVerified = true;
-            roleIdsToAdd.add(ROLE_IDS.MEMBER_ROLE_ID);
-            roleIdsToAdd.add(ROLE_IDS.HUSS_ROLE_ID);
-
-            const isHussOfficer = await hasAnySourceRole(
-              client,
-              member.id,
-              HUSS_SOURCE_GUILD_ID,
-              HUSS_OFFICER_ROLE_IDS,
-              ['Officer'],
-            );
-            if (isHussOfficer) {
-              roleIdsToAdd.add(ROLE_IDS.REGIMENT_OFFICER_ROLE_ID);
-            }
-          }
-
           const missingRoleIds = [...roleIdsToAdd]
             .filter(Boolean)
             .filter(roleId => !member.roles.cache.has(roleId));

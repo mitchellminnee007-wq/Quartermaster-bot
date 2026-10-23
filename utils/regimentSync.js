@@ -1,19 +1,16 @@
 'use strict';
 const { RegimentStore } = require('./regimentStore');
-const { ROLE_IDS, ZERO_SUM_SOURCE_GUILD_ID, ZERO_SUM_VERIFIED_ROLE_IDS, ZERO_SUM_OFFICER_ROLE_IDS, HUSS_SOURCE_GUILD_ID, HUSS_VERIFIED_ROLE_IDS, HUSS_OFFICER_ROLE_IDS } = require('./roleIds');
+const { ROLE_IDS } = require('./roleIds');
+const { getLegacySources } = require('./legacyRegiments');
 const LOL_GUILD_ID = '1521261614484033728';
 const TARGET = { member: ROLE_IDS.MEMBER_ROLE_ID, officer: ROLE_IDS.REGIMENT_OFFICER_ROLE_ID, commander: ROLE_IDS.REGIMENTAL_LEADER_ROLE_ID };
-const legacy = [
-  { guildId: ZERO_SUM_SOURCE_GUILD_ID, members: ZERO_SUM_VERIFIED_ROLE_IDS, officers: ZERO_SUM_OFFICER_ROLE_IDS },
-  { guildId: HUSS_SOURCE_GUILD_ID, members: HUSS_VERIFIED_ROLE_IDS, officers: HUSS_OFFICER_ROLE_IDS },
-];
 function errorText(e) { return `Sync failed (${e.code || e.name || 'unknown'}). Check bot access, role hierarchy and server availability.`; }
 async function memberOrNull(guild, id) {
   try { return await guild.members.fetch({ user: id, force: true }); }
   catch (e) { if (e.code === 10007) return null; throw e; }
 }
 class RegimentService {
-  constructor(client, store = new RegimentStore()) { this.client = client; this.store = store; this.tail = Promise.resolve(); }
+  constructor(client, store = new RegimentStore()) { this.client = client; this.store = store; this.tail = Promise.resolve(); this.approvals = new (require('./regimentApproval').ApprovalNotifications)(this); }
   run(fn) { const next = this.tail.then(fn); this.tail = next.catch(() => {}); return next; }
   async guild(id) {
     const guild = this.client.guilds.cache.get(id);
@@ -34,8 +31,8 @@ class RegimentService {
       if (m.id === r.commanderId) roles.add(TARGET.commander);
     }
     // Preserve the existing allied verification entitlement; registered mappings supersede it.
-    for (const source of legacy) {
-      if (data.regiments.some(r => r.guildId === source.guildId) || (data.disabledLegacy || []).includes(source.guildId)) continue;
+    for (const source of getLegacySources(data)) {
+      if (data.regiments.some(r => r.guildId === source.guildId && !r.legacyCompatibility) || (data.disabledLegacy || []).includes(source.guildId)) continue;
       const guild = this.client.guilds.cache.get(source.guildId);
       if (!guild) continue;
       if (guild.available === false) throw new Error('Legacy source unavailable');
@@ -71,7 +68,7 @@ class RegimentService {
   }
   async sweep(actor = {}, regimentId = null) {
     const snapshot = this.store.read();
-    if (!actor.userId && !snapshot.regiments.length && !Object.keys(snapshot.grants).length) return { users: 0, failed: 0 };
+    if (!actor.userId && !snapshot.regiments.some(r => (['deleting', 'suspended'].includes(r.status) || (r.status === 'active' && !r.legacyCompatibility))) && !Object.keys(snapshot.grants).length) return { users: 0, failed: 0 };
     const coalition = await this.guild(LOL_GUILD_ID);
     const members = await coalition.members.fetch();
     // Recompute aggregate entitlement, even for a regiment sweep, so departed users are covered.
@@ -92,7 +89,7 @@ class RegimentService {
     }
     this.store.change(d => {
       for (const r of d.regiments) {
-        if (regimentId && r.id !== regimentId) continue;
+        if ((regimentId && r.id !== regimentId) || !['active', 'deleting', 'suspended'].includes(r.status)) continue;
         r.syncError = failed ? `${failed} user(s) failed; automatic retry pending.` : null;
         if (!failed) r.lastSuccessfulSync = new Date().toISOString();
       }
@@ -118,7 +115,7 @@ class RegimentService {
   }
   init() {
     const schedule = fn => this.run(fn).catch(e => this.report(e));
-    const relevant = id => id === LOL_GUILD_ID || this.store.read().regiments.some(r => r.guildId === id) || legacy.some(r => r.guildId === id);
+    const relevant = id => id === LOL_GUILD_ID || this.store.read().regiments.some(r => r.guildId === id) || getLegacySources(this.store.read()).some(r => r.guildId === id);
     this.client.on('guildMemberUpdate', (old, member) => {
       if (!old.roles.cache.equals(member.roles.cache)) schedule(async () => { if (relevant(member.guild.id)) await this.syncUser(member.id); });
     });
@@ -128,7 +125,7 @@ class RegimentService {
     this.client.on('guildDelete', guild => {
       if (guild.available === false) return;
       schedule(async () => {
-        this.store.change(d => { for (const r of d.regiments.filter(r => r.guildId === guild.id)) { r.status = 'suspended'; r.syncError = 'Bot removed from source server; registration suspended.'; this.store.audit(d, 'server-removed', { guildId: guild.id }, { regimentId: r.id }); } });
+        this.store.change(d => { for (const r of d.regiments.filter(r => r.guildId === guild.id && r.status === 'active')) { r.status = 'suspended'; r.syncError = 'Bot removed from source server; registration suspended.'; this.store.audit(d, 'server-removed', { guildId: guild.id }, { regimentId: r.id }); } });
         await this.sweep();
       });
     });
@@ -137,9 +134,10 @@ class RegimentService {
       schedule(async () => {
         const missing = this.store.read().regiments.filter(r => r.status === 'active' && !this.client.guilds.cache.has(r.guildId));
         if (missing.length) this.store.change(d => { for (const r of d.regiments.filter(r => missing.some(x => x.id === r.id))) { r.status = 'suspended'; this.store.audit(d, 'server-absent-at-restart', { guildId: r.guildId }, { regimentId: r.id }); } });
+        await this.approvals.retry();
         await this.sweep();
       });
-      this.timer = setInterval(() => { if (!this.periodicPending) { this.periodicPending = true; schedule(async () => { try { await this.sweep(); } finally { this.periodicPending = false; } }); } }, 300000);
+      this.timer = setInterval(() => { if (!this.periodicPending) { this.periodicPending = true; schedule(async () => { try { await this.approvals.retry(); await this.sweep(); } finally { this.periodicPending = false; } }); } }, 300000);
       this.timer.unref();
     });
   }

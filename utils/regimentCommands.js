@@ -26,7 +26,7 @@ async function requireAccess(i, allowed) {
 }
 function selected(s, i, requestedName) {
   const name = requestedName || i.options?.getString('name');
-  const r = s.store.read().regiments.find(r => name ? norm(r.name) === norm(name) : r.guildId === i.guildId);
+  const r = [...s.store.read().regiments].reverse().find(r => name ? norm(r.name) === norm(name) : r.guildId === i.guildId);
   if (!r) throw new Error('Regiment not found. Use its exact name in LOL or run this in the regiment server.');
   return r;
 }
@@ -50,6 +50,7 @@ async function manual(i, mode, requestedName) {
   if (mode === 'coalition') await requireAccess(i, i.guildId === LOL_GUILD_ID && await admin(i));
   else if (mode === 'regiment') { r = selected(s, i, requestedName); await requireAccess(i, await canEdit(i, r) || (i.guildId === r.guildId && await manage(i))); }
   else if (mode !== 'user') throw new Error('Invalid synchronization scope');
+  if (r && r.status !== 'active') throw new Error('Only approved active regiments can be synchronized.');
   s.store.log('manual-sync', actor(i), { scope: mode, regimentId: r?.id || null });
   if (mode === 'user') { await s.syncUser(i.user.id); return 'Your roles have been reconciled. Roles can only be assigned while you are a member of LOL.'; }
   const result = await s.sweep(actor(i), r?.id);
@@ -57,15 +58,15 @@ async function manual(i, mode, requestedName) {
 }
 async function info(i) {
   const category = i.options.getString('category');
-  if (category === 'getting-started') return 'Quartermaster setup: use /invite for the existing bot invite. Add the bot to your regiment and ensure its existing Guild Members intent is enabled. Create separate Member and Officer roles, then use /create-regiment name:Name tag:TAG member:role officer:role (Manage Server required). Join Legion of Loyalists (LOL); ask @BravoMike185 for the invitation, because no verified LOL invite is stored in this project. In <#1563207553687748779> use /rolesync: User Role Sync for yourself, Regiment Role Sync for your regiment (commander, server manager or coalition admin), or Coalition Role Sync (coalition admins, intended once per war). /rolesync displays the same three controls.';
+  if (category === 'getting-started') return 'Quartermaster setup: use /invite for the existing bot invite. Add the bot to your regiment and ensure its existing Guild Members intent is enabled. Create separate Member and Officer roles, then use /create-regiment name:Name tag:TAG member:role officer:role (Manage Server required). New applications require a 48-hour officer vote before any LOL roles or regiment sync. Each regiment gets one result from its individual officer ballots; more than half of all eligible regiments must say yes. Only registered leaders may veto during the open vote. Join Legion of Loyalists (LOL): https://discord.gg/8ew5AEq5x9 . Contact @BravoMike185 if you need help joining. In <#1563207553687748779> use /rolesync: User Role Sync for yourself, Regiment Role Sync for your regiment (commander, server manager or coalition admin), or Coalition Role Sync (coalition admins, intended once per war). /rolesync displays the same three controls.';
   if (category === 'lol') return 'Legion of Loyalists (LOL) is a Colonial Loyalist coalition. Regiments keep independent leadership. There are no compulsory coalition operations and no central coalition facility. Members cooperate while Quartermaster connects regiment membership and leadership to coalition access.';
   const help = [
-    '**Regiment server:** /create-regiment requires Manage Server; select Member and Officer roles. /regiment-settings reads settings for everyone; changes/resync require commander or coalition admin (mapping changes in source server). /delete-regiment requires commander or coalition admin and exact ACCEPT. /regiment-status shows health (name can select a regiment from LOL).',
+    '**Regiment server:** /create-regiment requires Manage Server; select Member and Officer roles and await democratic regiment approval. /regiment-settings reads settings for everyone; changes/resync require commander or coalition admin (mapping changes in source server). /delete-regiment requires commander or coalition admin and exact ACCEPT. /regiment-status shows health (name can select a regiment from LOL).',
     '**#rolesync or /rolesync:** User Role Sync = self only. Regiment Role Sync = commander, source-server Manage Server or coalition admin; in LOL supply name. Coalition Role Sync = coalition admins in LOL, intended once per war. /info and /invite are informational.',
     '**Existing commands, in their configured server:** /promote = officers/admins, recruitment officers limited to initial recruitment; /demote and /discharge = officers/admins with existing rank restrictions; /promoteally = officers. /warning and /warningstatus = officers; warning votes use existing officer controls.',
     '/activitycheck and /clearactivitycheck = officers; /activitycheckroster = members; Mark Active button toggles yourself. /killcount add = members/officers; start, remove, reset, end = officers. /startrollover and /cancelrollover = officers.',
     '/operation and /training = Manage Server visibility plus officer checks; members join/leave via buttons, creators/officers manage events. /reactionrole setup = Manage Server plus officer check; role buttons toggle yourself. /botpanel = Manage Server plus officers. /ticketpanel = Manage Server; members open tickets, recruitment officers process them. /config = Manage Server; sets channels, roles and welcome image or views settings.',
-    'Automatic features: welcome, allied verification, leaving notices, warning expiry, event panels and rollover retain their existing behavior. Regiment sync adds role-change/join/leave handling and recovery retries. Contact @BravoMike185 for LOL invitation; no verified join URL is stored.'
+    'Automatic features: welcome, allied verification, leaving notices, warning expiry, event panels and rollover retain their existing behavior. Regiment sync adds role-change/join/leave handling and recovery retries. Join LOL: https://discord.gg/8ew5AEq5x9 . Contact @BravoMike185 for help.'
   ];
   return { embeds: [{ title: 'Quartermaster commands and permissions', description: help.join('\n\n'), color: 0x5865F2 }] };
 }
@@ -78,9 +79,9 @@ async function executeRaw(i) {
     const member = i.options.getRole('member', true), officer = i.options.getRole('officer', true);
     await mappings(i, member, officer);
     const r = s.store.create({ name: i.options.getString('name', true), tag: i.options.getString('tag', true), guildId: i.guildId, commanderId: i.user.id, memberRoleId: member.id, officerRoleId: officer.id }, actor(i));
-    try { await s.syncUser(i.user.id); }
-    catch (e) { s.store.change(d => { d.regiments.find(x => x.id === r.id).syncError = errorText(e); s.store.audit(d, 'sync-error', actor(i), { regimentId: r.id, error: errorText(e) }); }); return `Registered ${r.name} [${r.tag}]. Commander role synchronization is pending; check /regiment-status. Automatic retries are enabled.`; }
-    return `Registered ${r.name} [${r.tag}]. Commander role reconciled if you are in LOL. Other members are synchronized automatically; /rolesync can start a full sync.`;
+    await s.approvals.deliver(r.id);
+    const current = s.store.read().regiments.find(x => x.id === r.id);
+    return `Application submitted for ${r.name} [${r.tag}]. Awaiting democratic regiment admission; no LOL roles are granted by this application. ${current.poll?.state === 'bootstrap_required' ? 'No approved founding regiments exist. Coalition founding registrations must be explicitly established before a vote can open.' : current.poll?.openedAt ? 'Officer voting has opened for 48 hours.' : 'Voting publication is pending and will retry automatically; check /regiment-status.'}`;
   }
   if (command === 'rolesync') {
     const scope = i.options.getString('scope');
@@ -92,6 +93,7 @@ async function executeRaw(i) {
     const member = i.options.getRole('member'), officer = i.options.getRole('officer');
     if (member || officer || i.options.getBoolean('resync')) {
       await requireAccess(i, await canEdit(i, r));
+      if (['pending_approval', 'rejected'].includes(r.status)) throw new Error('Application is not approved. Pending mappings cannot change; withdraw and submit a new application to correct them. Rejected applications may be resubmitted with /create-regiment.');
       if (r.status === 'deleting') throw new Error('Regiment deletion is pending.');
       if (r.status === 'suspended') {
         await requireAccess(i, i.guildId === r.guildId && await manage(i));
@@ -104,14 +106,34 @@ async function executeRaw(i) {
         const mr = member || await i.guild.roles.fetch(r.memberRoleId), or = officer || await i.guild.roles.fetch(r.officerRoleId);
         if (!mr || !or) throw new Error('Both mappings must point to existing roles.');
         await mappings(i, mr, or);
-        s.store.change(d => { const current = d.regiments.find(x => x.id === r.id); current.memberRoleId = mr.id; current.officerRoleId = or.id; s.store.audit(d, 'mapping-change', actor(i), { regimentId: r.id, previous: { member: r.memberRoleId, officer: r.officerRoleId }, next: { member: mr.id, officer: or.id } }); });
+        s.store.change(d => { const current = d.regiments.find(x => x.id === r.id); current.legacyCompatibility = false; current.memberRoleId = mr.id; current.officerRoleId = or.id; s.store.audit(d, 'mapping-change', actor(i), { regimentId: r.id, previous: { member: r.memberRoleId, officer: r.officerRoleId }, next: { member: mr.id, officer: or.id } }); });
       }
       s.store.log('manual-sync', actor(i), { scope: 'settings', regimentId: r.id });
       const result = await s.sweep(actor(i), r.id);
       return `Settings saved; sync checked ${result.users} users, ${result.failed} failures.`;
     }
   }
-  return `Regiment: ${r.name} [${r.tag}]\nID: ${r.id}\nStatus: ${r.status}\nCommander: <@${r.commanderId}>\nServer: ${r.guildId}\nMember mapping: ${r.memberRoleId}\nOfficer mapping: ${r.officerRoleId}\nRegistered: ${r.registeredAt}\nLast successful full sync: ${r.lastSuccessfulSync || 'Never'}\nSync errors: ${r.syncError || 'None recorded'}`;
+  return `Regiment: ${r.name} [${r.tag}]\nID: ${r.id}\nStatus: ${r.status}\nCommander: <@${r.commanderId}>\nServer: ${r.guildId}\nMember mapping: ${r.memberRoleId}\nOfficer mapping: ${r.officerRoleId}\nRegistered: ${r.registeredAt}\nLast successful full sync: ${r.lastSuccessfulSync || 'Never'}\nSync errors: ${r.syncError || 'None recorded'}\nApproval: ${r.review ? `${r.review.decision} by ${r.review.userId} at ${r.review.timestamp}` : r.status === 'pending_approval' ? 'Awaiting regiment vote' : 'Existing registration'}\nVote status: ${r.poll?.state || 'Existing registration'}\nVote deadline (UTC): ${r.poll?.closesAt || 'Not started'}`;
+}
+async function decideApproval() { throw new Error('Direct admin approval is disabled. Admission requires the 48-hour two-level regiment vote.'); }
+async function voteButton(i, s) {
+  const [, , choice, id] = i.customId.split(':');
+  const r = s.store.read().regiments.find(r => r.id === id);
+  const voting = s.approvals.voting;
+  voting.assertOrigin(r, { guildId: i.guildId, channelId: i.channelId, messageId: i.message.id }, choice);
+  if (r.status !== 'pending_approval' || r.poll.state !== 'open') throw new Error('This poll is closed.');
+  const eligible = await voting.eligible(i.user.id, r, choice);
+  await requireAccess(i, eligible.length > 0);
+  const input = new TextInputBuilder().setCustomId('regiment-name').setLabel('Exact name of the regiment you represent').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80);
+  if (eligible.length === 1) input.setValue(eligible[0].name);
+  await i.showModal(new ModalBuilder().setCustomId(`qm:cast:${choice}:${id}:${i.channelId}:${i.message.id}`).setTitle(choice === 'veto' ? 'Regiment leader veto' : 'Individual officer ballot').addComponents(new ActionRowBuilder().addComponents(input)));
+}
+async function voteModal(i, s) {
+  const [, , choice, id, channelId, messageId] = i.customId.split(':');
+  await requireAccess(i, i.channelId === channelId);
+  const result = await s.approvals.voting.cast(id, i.fields.getTextInputValue('regiment-name'), choice, actor(i), { guildId: i.guildId, channelId, messageId });
+  await s.approvals.deliver(id);
+  return result.changed ? result.status === 'rejected' ? 'Leader veto recorded: application rejected immediately.' : 'Your individual officer ballot is recorded. Regiment outcomes are calculated after the deadline.' : result.reason || 'Poll already decided; no change made.';
 }
 async function execute(i) {
   const s = service(i.client);
@@ -134,6 +156,11 @@ function init(client) {
   service(client);
   client.on('interactionCreate', async i => {
     if (!i.customId?.startsWith('qm:')) return;
+    if (i.isButton() && i.customId.startsWith('qm:ballot:')) {
+      try { await service(client).run(() => voteButton(i, service(client))); }
+      catch (e) { service(client).store.log('vote-interaction-error', actor(i), { error: e.code ? errorText(e) : e.message }); await i.reply({ content: e.code ? errorText(e) : e.message, ephemeral: true, allowedMentions: { parse: [] } }); }
+      return;
+    }
     if (i.isButton() && i.customId === 'qm:regiment') {
       try {
         const input = new TextInputBuilder().setCustomId('regiment-name').setLabel('Registered regiment name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80);
@@ -145,6 +172,8 @@ function init(client) {
     const s = service(client);
     try {
       const result = await s.run(async () => {
+        if (i.isModalSubmit() && i.customId.startsWith('qm:cast:')) return voteModal(i, s);
+        if (i.isButton() && i.customId.startsWith('qm:approval:')) return decideApproval(i, s);
         if (i.isModalSubmit() && i.customId === 'qm:regiment-select') return manual(i, 'regiment', i.fields.getTextInputValue('regiment-name'));
         if (i.isModalSubmit() && i.customId.startsWith('qm:delete:')) {
           const id = i.customId.slice('qm:delete:'.length);
@@ -174,6 +203,6 @@ function definition(name) {
   if (name === 'info') b.addStringOption(o => o.setName('category').setDescription('Information category').setRequired(true).addChoices({ name: 'Getting Started', value: 'getting-started' }, { name: 'LOL', value: 'lol' }, { name: 'Commands', value: 'commands' }));
   return b;
 }
-module.exports = { execute, init, definition, service, admin, manage, requireAccess, manual };
+module.exports = { execute, init, definition, service, admin, manage, requireAccess, manual, decideApproval, voteButton, voteModal };
 
 

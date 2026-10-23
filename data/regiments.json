@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "regiments": [
+    {
+      "name": "The Winged Hussars Industries",
+      "tag": "HUSS",
+      "guildId": "1385714710405582858",
+      "commanderId": "781549558588112916",
+      "memberRoleId": "1386230860587733123",
+      "officerRoleId": "1386233581612826704",
+      "legacyCompatibility": true,
+      "id": "fab7440a-b170-451c-b12b-bd1cfecac08f",
+      "status": "active",
+      "registeredAt": "2026-10-23T17:36:34.419Z",
+      "lastSuccessfulSync": null,
+      "syncError": null,
+      "migration": "legacy-regiment-sources-v1"
+    }
+  ],
+  "grants": {},
+  "audit": [
+    {
+      "id": "e1e65a23-bc25-408e-a43c-f69e1bc03201",
+      "timestamp": "2026-10-23T17:36:34.426Z",
+      "action": "existing-regiment-imported",
+      "userId": null,
+      "guildId": "1385714710405582858",
+      "regimentId": "fab7440a-b170-451c-b12b-bd1cfecac08f",
+      "source": "hardcoded HUSS roles; live guild/member verification; user-confirmed commander",
+      "commanderId": "781549558588112916"
+    },
+    {
+      "id": "8d402bf4-847b-4a7f-bc4d-df0ef15baddd",
+      "timestamp": "2026-10-23T17:36:34.426Z",
+      "action": "legacy-regiment-config-migrated",
+      "userId": null,
+      "guildId": "1385714710405582858",
+      "migration": "legacy-regiment-sources-v1",
+      "keys": [
+        "ZERO_SUM",
+        "HUSS"
+      ],
+      "activeRegistrationsAdded": 1,
+      "backup": null
+    }
+  ],
+  "legacySources": [
+    {
+      "key": "ZERO_SUM",
+      "guildId": "1475414633211760796",
+      "members": [
+        "1479105409989080000",
+        "1479105113242210000",
+        "1479105025862010000"
+      ],
+      "officers": [
+        "1479105409989080000"
+      ],
+      "memberRoleNames": [
+        "CO",
+        "NCO",
+        "Enlisted"
+      ],
+      "officerRoleNames": [
+        "CO"
+      ],
+      "targetTagRoleId": "1521294074596823182",
+      "source": "utils/roleIds.js:ZERO_SUM_*; features/welcome.js:ZeroSum verification",
+      "registrationExcludedByUser": true,
+      "verification": {
+        "state": "unavailable",
+        "discordCode": 10004
+      },
+      "missingRegistrationFields": [
+        "confirmed name/tag",
+        "commander user ID",
+        "live source-role verification"
+      ]
+    },
+    {
+      "key": "HUSS",
+      "guildId": "1385714710405582858",
+      "members": [
+        "1386233581612826704",
+        "1386230860587733123"
+      ],
+      "officers": [
+        "1386233581612826704"
+      ],
+      "memberRoleNames": [
+        "Officer",
+        "Member"
+      ],
+      "officerRoleNames": [
+        "Officer"
+      ],
+      "targetTagRoleId": "1521293923073527828",
+      "source": "utils/roleIds.js:HUSS_*; features/welcome.js:Huss verification",
+      "verification": {
+        "state": "roles-verified",
+        "guildName": "The Winged Hussars Industries",
+        "targetTagName": "HUSS"
+      },
+      "confirmedCommanderId": "781549558588112916",
+      "missingRegistrationFields": []
+    }
+  ],
+  "migrations": {
+    "legacy-regiment-sources-v1": {
+      "timestamp": "2026-10-23T17:36:34.426Z",
+      "source": "existing hardcoded mappings",
+      "count": 2
+    }
+  }
+}
