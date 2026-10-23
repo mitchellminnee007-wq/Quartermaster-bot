@@ -28,6 +28,8 @@ function getRoleByName(guild, roleName) {
 }
 
 async function hasAnySourceRole(client, userId, sourceGuildId, roleIds, roleNames = []) {
+  const registry = new (require('../utils/regimentStore').RegimentStore)().read();
+  if (registry.regiments.some(r => r.guildId === sourceGuildId) || (registry.disabledLegacy || []).includes(sourceGuildId)) return false;
   const sourceGuild = client.guilds.cache.get(sourceGuildId)
     || await client.guilds.fetch(sourceGuildId).catch(() => null);
 
@@ -207,3 +209,4 @@ function registerWelcomeHandler(client) {
 
 module.exports = registerWelcomeHandler;
 module.exports.shouldAttemptAlliedVerification = shouldAttemptAlliedVerification;
+
