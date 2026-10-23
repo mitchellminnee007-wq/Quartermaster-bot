@@ -38,6 +38,10 @@ class RegimentService {
       if (m.roles.cache.has(r.memberRoleId)) roles.add(TARGET.member);
       if (m.roles.cache.has(r.officerRoleId)) roles.add(TARGET.officer);
       if (m.id === r.commanderId) roles.add(TARGET.commander);
+      if (r.tagRoleId && r.tagRoleProvision?.enabled && r.tagRoleProvision.roleId === r.tagRoleId && (m.roles.cache.has(r.memberRoleId) || m.roles.cache.has(r.officerRoleId) || m.id === r.commanderId)) {
+        if (r.tagRoleProvision.state !== 'ready') throw syncFailure('TAG_ROLE_PENDING', `Regiment ${r.id}: tag provisioning needs recovery before synchronization.`);
+        roles.add(r.tagRoleId);
+      }
     }
     // Preserve the existing allied verification entitlement; registered mappings supersede it.
     for (const source of getLegacySources(data)) {
@@ -71,6 +75,7 @@ class RegimentService {
     for (const roleId of new Set([...desired, ...owned])) {
       const role = coalition.roles.cache.get(roleId);
       if (!role || role.managed || role.position >= me.roles.highest.position) throw syncFailure('TARGET_ROLE_UNMANAGEABLE', `LOL role ${roleId} is not manageable: missing, managed, or at/above the bot highest role. Place the bot role above this target role.`);
+      if (desired.has(roleId) && data.regiments.some(r => r.tagRoleId === roleId) && (BigInt(role.permissions?.bitfield ?? -1) !== 0n || role.hoist || role.mentionable)) throw syncFailure('TAG_ROLE_UNSAFE', `Tag role ${roleId} no longer has the approved permissionless settings.`);
       if (desired.has(roleId) && !member.roles.cache.has(roleId)) {
         // Durable intent BEFORE API request: recovery can retry or undo after interruption.
         this.store.change(d => { d.grants[userId] = [...new Set([...(d.grants[userId] || []), roleId])]; });
@@ -80,8 +85,10 @@ class RegimentService {
         this.store.change(d => { d.grants[userId] = (d.grants[userId] || []).filter(id => id !== roleId); });
       }
     }
+    await require('./regimentNickname').reconcileNickname(this, member, data, context);
   }
   async sweep(actor = {}, regimentId = null, progress = null) {
+    this.activeSync = { regimentId, completed: 0, total: 0, failed: 0 };
     try { return await this.sweepRaw(actor, regimentId, progress); }
     catch (e) { e.isSyncError = true; throw e; }
     finally { this.activeSync = null; }

@@ -63,18 +63,18 @@ class RegimentVoting {
     store.change(d => {
       const r = d.regiments.find(r => r.id === id);
       if (!r || r.status !== 'pending_approval' || (r.poll && !['policy_pending', 'bootstrap_required'].includes(r.poll.state))) return;
-      r.poll = { version: 2, revision: 0, state: electorate.length ? 'publishing' : 'bootstrap_required', policy: structuredClone(policy), electorate, officerBallots: {}, messages: {}, openedAt: null, closesAt: null };
+      r.poll = { ...(r.poll?.officerNotice ? { officerNotice: r.poll.officerNotice } : {}), version: 2, revision: 0, state: electorate.length ? 'publishing' : 'bootstrap_required', policy: structuredClone(policy), electorate, officerBallots: {}, messages: {}, openedAt: null, closesAt: null };
       store.audit(d, 'regiment-poll-created', { guildId: LOL }, { regimentId: id, electorate });
     });
     return electorate.length > 0;
   }
-  recordMessage(id, destinationId, channelId, messageId) {
+  recordMessage(id, destinationId, channelId, messageId, renderedRevision) {
     this.service.store.change(d => {
       const r = d.regiments.find(r => r.id === id);
       if (!this.ready() || !validPolicy(r?.poll?.policy) || !DESTINATIONS.includes(destinationId)) throw new Error('Voting policy or destination is not confirmed.');
       const previous = r.poll.messages[destinationId];
       if (previous?.messageId && (previous.messageId !== messageId || previous.channelId !== channelId)) throw new Error('Voting destination already bound to another message.');
-      r.poll.messages[destinationId] = { ...previous, channelId, messageId, deliveredRevision: r.poll.revision, lastError: null };
+      r.poll.messages[destinationId] = { ...previous, channelId, messageId, deliveredRevision: renderedRevision ?? r.poll.revision, lastError: null };
       if (!r.poll.openedAt && DESTINATIONS.every(key => r.poll.messages[key]?.messageId)) {
         r.poll.openedAt = new Date().toISOString(); r.poll.state = 'open'; r.poll.revision++;
         if (r.poll.policy.internalMajority === 'cast_at_deadline') r.poll.closesAt = new Date(Date.parse(r.poll.openedAt) + r.poll.policy.durationMs).toISOString();
@@ -110,6 +110,7 @@ class RegimentVoting {
   }
   finalize(d, r, outcome, actor, reason) {
     r.status = outcome === 'approved' ? 'active' : 'rejected'; r.poll.state = outcome; r.poll.revision++;
+    if (outcome === 'approved') r.tagRoleProvision = { enabled: true, state: 'pending' };
     r.review = { decision: outcome, userId: actor.userId || null, guildId: actor.guildId || LOL, timestamp: new Date().toISOString(), reason };
     this.service.store.audit(d, `regiment-vote-${outcome}`, actor, { regimentId: r.id, reason, tally: count(r.poll) });
   }

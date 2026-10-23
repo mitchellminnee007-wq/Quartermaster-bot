@@ -1,6 +1,5 @@
 'use strict';
-// Compatibility adapter for the existing retry loop. Publication remains disabled until
-// policy and duration are confirmed. No configuration is enabled by default.
+// Finalize voting and retry durable provisioning before normal role reconciliation.
 const { RegimentVoting } = require('./regimentVoting');
 class ApprovalNotifications {
   constructor(service, policy, transport = new (require('./regimentVoteTransport').VoteTransport)()) { this.service = service; this.voting = new RegimentVoting(service, policy); this.transport = transport; }
@@ -13,6 +12,7 @@ class ApprovalNotifications {
   async retry() {
     if (!this.voting.ready()) return;
     this.voting.closeDue();
+    await require('./regimentTagRole').retryTagRoles(this.service);
     for (const r of this.service.store.read().regiments.filter(r => r.poll)) await this.deliver(r.id);
   }
 }

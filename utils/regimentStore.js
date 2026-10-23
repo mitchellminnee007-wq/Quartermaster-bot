@@ -32,12 +32,12 @@ class RegimentStore {
   decide() { throw new Error('Direct admin approval is disabled; use the regiment ballot.'); }
   create(input, actor) {
     const name = String(input.name || '').trim(), tag = String(input.tag || '').trim();
-    if (!name || name.length > 80 || !tag || tag.length > 16 || /[\r\n\x00-\x1f]/.test(name + tag)) throw new Error('Name (1–80) and tag (1–16) must be valid single-line text.');
+    if (!name || name.length > 80 || !tag || tag.length > 16 || /[\r\n\x00-\x1f]/.test(name + tag)) throw new Error('Name (1â€“80) and tag (1â€“16) must be valid single-line text.');
     for (const key of ['guildId', 'commanderId', 'memberRoleId', 'officerRoleId']) if (!ID.test(input[key] || '')) throw new Error(`Invalid Discord ID: ${key}`);
     if (input.memberRoleId === input.officerRoleId) throw new Error('Select different Member and Officer roles.');
     return this.change(d => {
       if (d.regiments.some(r => r.status !== 'rejected' && (r.guildId === input.guildId || norm(r.name) === norm(name) || norm(r.tag) === norm(tag)))) throw new Error('Name, tag or server is already registered (including pending removal).');
-      const r = { id: randomUUID(), name, tag, guildId: input.guildId, commanderId: input.commanderId, memberRoleId: input.memberRoleId, officerRoleId: input.officerRoleId, status: 'pending_approval', poll: { state: 'policy_pending' }, registeredAt: new Date().toISOString(), lastSuccessfulSync: null, syncError: null };
+      const r = { id: randomUUID(), name, tag, guildId: input.guildId, commanderId: input.commanderId, memberRoleId: input.memberRoleId, officerRoleId: input.officerRoleId, status: 'pending_approval', poll: { state: 'policy_pending', officerNotice: { state: 'pending' } }, registeredAt: new Date().toISOString(), lastSuccessfulSync: null, syncError: null };
       d.regiments.push(r); this.audit(d, 'registration-requested', actor, { regimentId: r.id }); return r;
     });
   }
