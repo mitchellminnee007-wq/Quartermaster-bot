@@ -54,6 +54,21 @@ for (const dir of commandDirs) {
   }
 }
 
+const safeReply = async (interaction, message) => {
+  try {
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: message, ephemeral: true });
+    } else {
+      await interaction.reply({ content: message, ephemeral: true });
+    }
+  } catch (error) {
+    if (error?.code === 10062 || error?.status === 404 || error?.message === 'Unknown interaction') {
+      return;
+    }
+    console.error('Failed to send interaction response:', error);
+  }
+};
+
 client.once(Events.ClientReady, () => {
   console.log(`Logged in as ${client.user.tag}`);
   client.user.setActivity('Managing Qualifications', { type: ActivityType.Playing });
@@ -70,11 +85,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleButton(interaction);
         } catch (error) {
           console.error('Error handling warning vote:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error while handling that vote!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error while handling that vote!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error while handling that vote!');
         }
       }
       return;
@@ -87,11 +98,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleButton(interaction);
         } catch (error) {
           console.error('Error handling activity check button:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error processing your request!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error processing your request!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error processing your request!');
         }
       }
       return;
@@ -104,11 +111,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleButton(interaction);
         } catch (error) {
           console.error('Error handling ticket button:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error handling that ticket action!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error handling that ticket action!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error handling that ticket action!');
         }
       }
       return;
@@ -121,11 +124,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleButton(interaction);
         } catch (error) {
           console.error('Error handling operation button:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error handling that operation action!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error handling that operation action!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error handling that operation action!');
         }
       }
       return;
@@ -138,11 +137,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleButton(interaction);
         } catch (error) {
           console.error('Error handling training button:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error handling that training action!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error handling that training action!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error handling that training action!');
         }
       }
       return;
@@ -155,11 +150,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleButton(interaction);
         } catch (error) {
           console.error('Error handling kill count button:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error handling that action!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error handling that action!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error handling that action!');
         }
       }
       return;
@@ -172,11 +163,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleButton(interaction);
         } catch (error) {
           console.error('Error handling bot panel button:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error handling that action!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error handling that action!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error handling that action!');
         }
       }
       return;
@@ -189,11 +176,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleButton(interaction);
         } catch (error) {
           console.error('Error handling reaction role button:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error toggling that role!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error toggling that role!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error toggling that role!');
         }
       }
       return;
@@ -211,11 +194,7 @@ client.on(Events.InteractionCreate, async interaction => {
           await command.handleSelect(interaction);
         } catch (error) {
           console.error('Error handling ticket select menu:', error);
-          if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'There was an error processing that selection!', ephemeral: true });
-          } else {
-            await interaction.reply({ content: 'There was an error processing that selection!', ephemeral: true });
-          }
+          await safeReply(interaction, 'There was an error processing that selection!');
         }
       }
     }

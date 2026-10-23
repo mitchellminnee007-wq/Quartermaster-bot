@@ -14,12 +14,20 @@ const {
 
 const ALLIED_TARGET_GUILD_ID = '1521261614484033728';
 
+function shouldAttemptAlliedVerification(guildId) {
+  return [
+    ALLIED_TARGET_GUILD_ID,
+    ZERO_SUM_SOURCE_GUILD_ID,
+    HUSS_SOURCE_GUILD_ID,
+  ].includes(guildId);
+}
+
 function getRoleByName(guild, roleName) {
   const normalized = roleName.toLowerCase();
   return guild.roles.cache.find(role => role.name.toLowerCase() === normalized) || null;
 }
 
-async function hasAnySourceRole(client, userId, sourceGuildId, roleIds) {
+async function hasAnySourceRole(client, userId, sourceGuildId, roleIds, roleNames = []) {
   const sourceGuild = client.guilds.cache.get(sourceGuildId)
     || await client.guilds.fetch(sourceGuildId).catch(() => null);
 
@@ -32,10 +40,19 @@ async function hasAnySourceRole(client, userId, sourceGuildId, roleIds) {
     return false;
   }
 
-  return roleIds.some(roleId => sourceMember.roles.cache.has(roleId));
+  const candidateRoleIds = new Set(roleIds);
+  const normalizedRoleNames = (roleNames || []).map(name => name.toLowerCase());
+
+  for (const role of sourceGuild.roles.cache.values()) {
+    if (normalizedRoleNames.includes(role.name.toLowerCase())) {
+      candidateRoleIds.add(role.id);
+    }
+  }
+
+  return [...candidateRoleIds].some(roleId => sourceMember.roles.cache.has(roleId));
 }
 
-module.exports = (client) => {
+function registerWelcomeHandler(client) {
   // Welcome new members: ping and direct them to verification and rules
   client.on(Events.GuildMemberAdd, async (member) => {
     try {
@@ -58,7 +75,7 @@ module.exports = (client) => {
         console.warn('Could not find unverified role.');
       }
 
-      if (member.guild.id === ALLIED_TARGET_GUILD_ID) {
+      if (shouldAttemptAlliedVerification(member.guild.id)) {
         try {
           const roleIdsToAdd = new Set();
           let isAutoVerified = false;
@@ -68,6 +85,7 @@ module.exports = (client) => {
             member.id,
             ZERO_SUM_SOURCE_GUILD_ID,
             ZERO_SUM_VERIFIED_ROLE_IDS,
+            ['CO', 'NCO', 'Enlisted'],
           );
           if (isVerifiedInZeroSum) {
             isAutoVerified = true;
@@ -79,6 +97,7 @@ module.exports = (client) => {
               member.id,
               ZERO_SUM_SOURCE_GUILD_ID,
               ZERO_SUM_OFFICER_ROLE_IDS,
+              ['CO'],
             );
             if (isZeroSumOfficer) {
               roleIdsToAdd.add(ROLE_IDS.REGIMENT_OFFICER_ROLE_ID);
@@ -90,6 +109,7 @@ module.exports = (client) => {
             member.id,
             HUSS_SOURCE_GUILD_ID,
             HUSS_VERIFIED_ROLE_IDS,
+            ['Officer', 'Member'],
           );
           if (isVerifiedInHuss) {
             isAutoVerified = true;
@@ -101,6 +121,7 @@ module.exports = (client) => {
               member.id,
               HUSS_SOURCE_GUILD_ID,
               HUSS_OFFICER_ROLE_IDS,
+              ['Officer'],
             );
             if (isHussOfficer) {
               roleIdsToAdd.add(ROLE_IDS.REGIMENT_OFFICER_ROLE_ID);
@@ -182,4 +203,7 @@ module.exports = (client) => {
       console.error('Error sending welcome message:', err);
     }
   });
-};
+}
+
+module.exports = registerWelcomeHandler;
+module.exports.shouldAttemptAlliedVerification = shouldAttemptAlliedVerification;
